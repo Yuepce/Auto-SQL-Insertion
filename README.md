@@ -63,3 +63,9 @@ Single bulk statement	Output: INSERT INTO table (…) VALUES (…), (…), …;	
 5. Bottom line
 
 The tool turns a tedious, error-prone Excel-to-SQL workflow into a one-click, bullet-proof operation—saving time, eliminating date/ID mistakes, and requiring no infrastructure budget.
+
+请重新对以下逻辑进行SQL query代码生成。首先先将tb_member_account通过mbr_acct_cd这列和ra_rebate_details_account的member_account_code 进行merge，其次再用merge后的表中的（employer_account_code， member_account_code）和ra_rebate_details_funds的（employer_account_code， member_account_code）进行merge。之后基于以下筛选条件生产SQL query：Report Criteria：
+Extract all information in ra_rebate_details_account and ra_rebate_details_funds where ra_rebate_details_account.account_type = “ER”
+OR all information in ra_rebate_details_account and ra_rebate_details_funds where ra_rebate_details_account.account_type != “ER”, “REE”, “CEE” and ra_rebate_details_funds.fund_code != “SLMIF” or “SLMIF-B”
+OR information in ra_rebate_details_account and ra_rebate_details_funds where ra_rebate_details_account.account_type != “ER”, “REE”, “CEE” and ra_rabte_details_fund.fund_code = “SLMIF” or “SLMIF-B” and [1st day of (tb_member_account.date_of_birth + 60 years)] > Report Generation Date
+DELETE_FLAG = N for all tables in DWH used in the extraction.
