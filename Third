@@ -1,0 +1,168 @@
+我理解了问题所在。当在 `reporting_center` 列中存在相同ID时，排序会出现问题。以下是修复后的代码，确保按照指定的三个主键列（`reporting_center`, `investment_fund_code`, `benefit_account`）进行稳定排序：
+
+```python
+# 安装必要库 (首次运行需取消注释)
+# !pip install pandas numpy openpyxl
+
+import pandas as pd
+import numpy as np
+from IPython.display import display, Markdown
+
+# ========================
+# 步骤1: 生成模拟测试数据 (包含三个主键列)
+# ========================
+def generate_fake_data(num_rows=10):
+    """创建包含空值和特殊字符的测试数据"""
+    np.random.seed(42)
+    
+    # 创建三个主键列 - 确保有部分重复值
+    reporting_center = np.random.choice(['RC001', 'RC002', 'RC003', 'RC004', 'RC001'], num_rows)
+    investment_fund_code = np.random.choice(['IF100', 'IF200', 'IF300', 'IF100', 'IF200'], num_rows)
+    benefit_account = np.random.choice(['BA01', 'BA02', 'BA03', 'BA01', 'BA02'], num_rows)
+    
+    data = {
+        'reporting_center': reporting_center,
+        'investment_fund_code': investment_fund_code,
+        'benefit_account': benefit_account,
+        # 带空值的整数列
+        'A': np.random.choice([1, 2, 3, np.nan, ''], num_rows),
+        # 带空字符串和单引号的文本列
+        'B': np.random.choice(['apple', "o'connor", 'banana', '', 'cherry'], num_rows),
+        # 带空值的浮点数列
+        'C': np.round(np.random.uniform(10, 100, num_rows), 2)
+    }
+    
+    # 随机插入空字符串
+    for col in ['B']:
+        data[col] = [v if np.random.rand() > 0.3 else '' for v in data[col]]
+    
+    return pd.DataFrame(data)
+
+# 生成测试数据 (10行示例)
+df = generate_fake_data()
+display(Markdown("**生成的测试数据 (包含重复的主键值):**"))
+display(df)
+
+# ====================================================
+# 步骤2: 核心功能 - 转换Excel数据为SQL插入语句 (修复排序问题)
+# ====================================================
+def df_to_sql(df, table_name="test", primary_keys=['reporting_center', 'investment_fund_code', 'benefit_account']):
+    """将DataFrame转换为SQL插入语句，按主键排序"""
+    # 1. 按主键列排序
+    try:
+        # 确保所有主键列都存在
+        missing_keys = [key for key in primary_keys if key not in df.columns]
+        if missing_keys:
+            raise ValueError(f"以下主键列不存在: {missing_keys}")
+            
+        # 按主键排序（稳定排序）
+        sorted_df = df.sort_values(by=primary_keys, kind='mergesort')
+    except Exception as e:
+        print(f"排序错误: {str(e)} - 使用原始顺序")
+        sorted_df = df
+    
+    # 2. 处理列名
+    columns = ', '.join([f'"{col}"' for col in sorted_df.columns])  # 添加引号防止特殊字符问题
+    
+    # 3. 生成值列表
+    value_rows = []
+    for _, row in sorted_df.iterrows():
+        values = []
+        for val in row:
+            # 处理空值和空字符串
+            if pd.isna(val) or val == '':
+                values.append("NULL")
+            # 处理字符串 (转义单引号)
+            elif isinstance(val, str):
+                val_escaped = val.replace("'", "''")
+                values.append(f"'{val_escaped}'")
+            # 处理数值类型
+            elif isinstance(val, (int, float)):
+                values.append(str(val))
+            # 处理其他类型 (如布尔值)
+            else:
+                values.append(f"'{str(val)}'")
+        
+        value_rows.append(f"({', '.join(values)})")
+    
+    # 4. 构建完整SQL语句
+    sql = f"INSERT INTO {table_name} ({columns})\nVALUES\n"
+    sql += ',\n'.join(value_rows) + ';'
+    return sql
+
+# ========================
+# 步骤3: 执行转换并显示
+# ========================
+# 从DataFrame直接转换
+table_name = "test"
+primary_keys = ['reporting_center', 'investment_fund_code', 'benefit_account']
+
+sql_output = df_to_sql(df, table_name, primary_keys)
+
+display(Markdown("**生成的SQL语句 (按主键排序):**"))
+display(Markdown(f"```sql\n{sql_output}\n```"))
+
+# ===================================
+# 可选功能: 从Excel文件读取
+# ===================================
+def excel_to_sql(file_path, sheet_name, table_name, primary_keys):
+    """从Excel文件读取并生成SQL，按主键排序"""
+    try:
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
+        return df_to_sql(df, table_name, primary_keys)
+    except Exception as e:
+        return f"错误: {str(e)}"
+
+# 使用示例 (取消注释运行)
+# final_sql = excel_to_sql(
+#     file_path="your_file.xlsx",
+#     sheet_name="Sheet1",
+#     table_name="your_table",
+#     primary_keys=['reporting_center', 'investment_fund_code', 'benefit_account']
+# )
+# display(Markdown(f"```sql\n{final_sql}\n```"))
+```
+
+### 主要修复和改进：
+
+1. **主键排序问题修复**：
+   - 添加了 `primary_keys` 参数，明确指定排序依据的列
+   - 使用 `sort_values(by=primary_keys, kind='mergesort')` 进行稳定排序
+   - 添加了错误处理，当主键列不存在时提供明确错误信息
+
+2. **测试数据增强**：
+   - 生成包含重复主键值的测试数据（`reporting_center`, `investment_fund_code`, `benefit_account`）
+   - 确保排序功能可以处理重复值情况
+
+3. **排序稳定性**：
+   - 使用 `kind='mergesort'` 确保当主键值相同时，保持原始数据顺序
+   - 这对于处理相同主键值的多行数据非常重要
+
+4. **完整的错误处理**：
+   - 检查所有主键列是否存在于DataFrame中
+   - 捕获排序过程中的任何异常，并提供回退方案
+
+### 使用说明：
+
+1. **指定主键列**：
+   ```python
+   primary_keys = ['reporting_center', 'investment_fund_code', 'benefit_account']
+   sql_output = df_to_sql(df, "test", primary_keys)
+   ```
+
+2. **从Excel文件读取**：
+   ```python
+   final_sql = excel_to_sql(
+       file_path="your_data.xlsx",
+       sheet_name="Sheet1",
+       table_name="financial_data",
+       primary_keys=['reporting_center', 'investment_fund_code', 'benefit_account']
+   )
+   ```
+
+3. **输出特点**：
+   - SQL语句中的行按指定主键排序
+   - 相同主键值的行保持它们在原始数据中的相对顺序
+   - 特殊字符和空值被正确处理
+
+这个修复版本专门解决了当主键列中存在相同值时出现的排序问题，并确保按照要求的三个主键列进行稳定排序。
