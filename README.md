@@ -69,3 +69,49 @@ Extract all information in ra_rebate_details_account and ra_rebate_details_funds
 OR all information in ra_rebate_details_account and ra_rebate_details_funds where ra_rebate_details_account.account_type != “ER”, “REE”, “CEE” and ra_rebate_details_funds.fund_code != “SLMIF” or “SLMIF-B”
 OR information in ra_rebate_details_account and ra_rebate_details_funds where ra_rebate_details_account.account_type != “ER”, “REE”, “CEE” and ra_rabte_details_fund.fund_code = “SLMIF” or “SLMIF-B” and [1st day of (tb_member_account.date_of_birth + 60 years)] > Report Generation Date
 DELETE_FLAG = N for all tables in DWH used in the extraction.
+
+-- 定义报告生成日期变量 (根据实际需求设置)
+DECLARE @ReportGenerationDate DATE = GETDATE();
+
+SELECT 
+    -- 选择需要的列 (根据实际需求调整)
+    a.*,
+    f.*,
+    m.date_of_birth,
+    DATEADD(YEAR, 60, m.date_of_birth) AS dob_plus_60,
+    DATEFROMPARTS(YEAR(DATEADD(YEAR, 60, m.date_of_birth)), 
+                   MONTH(DATEADD(YEAR, 60, m.date_of_birth)), 
+                   1) AS first_day_after_60
+FROM 
+    DWH.dbo.tb_member_account m
+INNER JOIN 
+    DWH.dbo.ra_rebate_details_account a 
+    ON m.mbr_acct_cd = a.member_account_code
+    AND m.DELETE_FLAG = 'N'
+    AND a.DELETE_FLAG = 'N'
+INNER JOIN 
+    DWH.dbo.ra_rebate_details_funds f 
+    ON a.employer_account_code = f.employer_account_code
+    AND a.member_account_code = f.member_account_code
+    AND f.DELETE_FLAG = 'N'
+WHERE 
+    -- 条件1: account_type = 'ER'
+    (a.account_type = 'ER')
+    
+    OR 
+    -- 条件2: account_type 非特定值 AND fund_code 非特定值
+    (a.account_type NOT IN ('ER', 'REE', 'CEE')
+    AND f.fund_code NOT IN ('SLMIF', 'SLMIF-B'))
+    
+    OR 
+    -- 条件3: account_type 非特定值 AND fund_code 为特定值 AND 年龄条件
+    (a.account_type NOT IN ('ER', 'REE', 'CEE')
+    AND f.fund_code IN ('SLMIF', 'SLMIF-B')
+    AND DATEFROMPARTS(
+            YEAR(DATEADD(YEAR, 60, m.date_of_birth)), 
+            MONTH(DATEADD(YEAR, 60, m.date_of_birth)), 
+            1
+        ) > @ReportGenerationDate
+    );
+
+
