@@ -14,3 +14,100 @@ RB  3100004  PG8000004  8000004  REE  ERVC  SLMIF-B �
 我的输出是SQL Query:" select scheme_cd， emplr_acct_cd，payroll_group_id，mbr_acct_cd，acct_type，sub_acct_type，fund_code，unit_count，eff_date，record_effective_datetime，record_created_by，record_end_datetime，record_last_updated_by，delete_flag from tb_account_balance 
 where where (mbr_acct_cd，acct_type，sub_acct_type，fund_code）IN （(8000001，8000002， 8000003， 8000004），（TVC， SVC， PAH， REE），(TVC，SVC，FRVC，FRMC，ERVC), (SL65, SLCA, SLMIF-B, CRSIF-B, SLRMB-B) ) " 
 请帮我自动提取改表的全部列，并生成对应的select （提取的全部列）from tb_account_balance where (mbr_acct_cd，acct_type，sub_acct_type，fund_code）的unique ID, 以此作为筛选条件进行select
+
+
+以下是一个Python函数，用于解析输入文本表格并生成所需的SQL查询语句：
+
+```python
+import re
+
+def generate_sql_query(input_text):
+    # 提取表名（根据描述固定为tb_account_balance）
+    table_name = "tb_account_balance"
+    
+    # 分割文本行并移除空行
+    lines = [line.strip() for line in input_text.split('\n') if line.strip()]
+    
+    # 提取列名（第一行）
+    columns = re.split(r'\s+', lines[0].strip())
+    
+    # 处理数据行
+    data_rows = []
+    for line in lines[1:]:
+        # 跳过空行和纯空格行
+        if not line.strip() or line.isspace():
+            continue
+        # 分割数据行（处理不定长空格）
+        row_data = re.split(r'\s+', line.strip())
+        data_rows.append(row_data)
+    
+    # 获取目标列的索引
+    target_cols = ['mbr_acct_cd', 'acct_type', 'sub_acct_type', 'fund_code']
+    col_indices = [columns.index(col) for col in target_cols]
+    
+    # 收集唯一组合值
+    unique_combinations = set()
+    for row in data_rows:
+        if len(row) < len(columns):
+            continue
+        # 提取目标值并组成元组
+        combination = tuple(row[i] for i in col_indices)
+        unique_combinations.add(combination)
+    
+    # 构建SQL查询
+    select_columns = ", ".join(columns)
+    in_values = ", ".join([str(tup) for tup in unique_combinations])
+    
+    sql = f"SELECT {select_columns} FROM {table_name} "
+    sql += f"WHERE (mbr_acct_cd, acct_type, sub_acct_type, fund_code) "
+    sql += f"IN ({in_values})"
+    
+    return sql
+
+# 示例使用
+input_text = """
+scheme_cd  emplr_acct_cd  payroll_group_id  mbr_acct_cd  acct_type  sub_acct_type  fund_code  unit_count  eff_date  record_effective_datetime  record_created_by  record_end_datetime  record_last_updated_by  delete_flag
+                          
+                          
+RB  3100001  PG8000001  8000001  TVC  TVC  SL65  100  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+                          
+                          
+RB  3100002  PG8000002  8000002  SVC  SVC  SLCA  20  45871  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+                          
+                          
+RB  3100003  PG8000003  8000003  PAH  FRVC  SLMIF-B  8  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+RB  3100003  PG8000003  8000003  PAH  FRMC  CRSIF-B  15  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+RB  3100003  PG8000003  8000003  PAH  FRMC  SLRMB-B  12  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+RB  3100004  PG8000004  8000004  REE  ERVC  SLMIF-B  10  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+"""
+
+print(generate_sql_query(input_text))
+```
+
+### 函数说明：
+1. **输入处理**：
+   - 使用正则表达式 `re.split(r'\s+')` 处理不定长空格/制表符分隔
+   - 过滤空行和纯空格行
+   - 第一行作为列名，其余为数据行
+
+2. **目标列处理**：
+   - 定位四个目标列：`mbr_acct_cd, acct_type, sub_acct_type, fund_code`
+   - 收集这些列值的唯一组合（使用set去重）
+
+3. **SQL生成**：
+   - 选择所有原始列
+   - WHERE条件使用元组形式：`(col1, col2, col3, col4) IN (...)`
+   - 自动处理值格式（字符串值不加引号，因为输入都是数字/字母组合）
+
+### 输出示例：
+```sql
+SELECT scheme_cd, emplr_acct_cd, payroll_group_id, mbr_acct_cd, acct_type, sub_acct_type, fund_code, unit_count, eff_date, record_effective_datetime, record_created_by, record_end_datetime, record_last_updated_by, delete_flag FROM tb_account_balance WHERE (mbr_acct_cd, acct_type, sub_acct_type, fund_code) IN (('8000003', 'PAH', 'FRMC', 'CRSIF-B'), ('8000001', 'TVC', 'TVC', 'SL65'), ('8000003', 'PAH', 'FRVC', 'SLMIF-B'), ('8000004', 'REE', 'ERVC', 'SLMIF-B'), ('8000002', 'SVC', 'SVC', 'SLCA'), ('8000003', 'PAH', 'FRMC', 'SLRMB-B'))
+```
+
+### 注意事项：
+1. 特殊空格字符处理：使用正则表达式 `\s+` 兼容全角/半角空格
+2. 数据验证：跳过列数不匹配的行
+3. 值格式化：元组值自动按原样输出（输入数据不包含需要引号的特殊字符）
+4. 表名固定：根据问题描述直接使用 `tb_account_balance`
+
+此函数能正确处理您提供的示例数据，并生成符合要求的SQL查询语句
