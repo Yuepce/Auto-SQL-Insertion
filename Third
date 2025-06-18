@@ -1,191 +1,108 @@
-以下是优化后的通用函数，接受表名、表内容和目标列作为输入，并生成格式化的SQL查询：
+以下代码再我输入sample后报错,请帮我debug
 
-```python
-import re
+Cell In[18], line 4
+    RB	3100001	PG8000001	8000001	TVC	TVC	SL65	100	2025-08-01	20250801235959	SYSTEM	20250801235959	SYSTEM	N
+      	       	         	       	   	   	    	   	     ^
+SyntaxError: leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers
 
-def generate_sorted_sql_query(table_name, input_text, target_cols):
+代码：
+def _fmt_cell(value: str, col_name: str) -> str:
     """
-    根据输入的表内容生成格式化的SQL查询，WHERE条件按目标列排序
-    
-    参数:
-    table_name (str): 数据库表名
-    input_text (str): 表内容文本
-    target_cols (list): 用于WHERE条件的目标列名列表
-    
-    返回:
-    str: 格式化的SQL查询语句
+    把单元格文本转换为 SQL value。
+    仅当列名含 'date' 或 'day' 时，才尝试把 8/14 位数字解析为日期 / 日期时间。
     """
-    # 分割文本行并移除空行
-    lines = [line.strip() for line in input_text.split('\n') if line.strip()]
-    
-    if not lines:
-        return f"SELECT * FROM {table_name} /* No data provided */"
-    
-    # 提取列名
-    columns = re.split(r'\s+', lines[0].strip())
-    
-    # 处理数据行
-    data_rows = []
-    for line in lines[1:]:
-        if not line.strip() or line.isspace():
-            continue
-        row_data = re.split(r'\s+', line.strip())
-        if len(row_data) >= len(columns):  # 确保行数据完整
-            data_rows.append(row_data)
-    
-    # 验证目标列是否存在
-    for col in target_cols:
-        if col not in columns:
-            raise ValueError(f"目标列 '{col}' 不在表列中")
-    
-    # 获取目标列的索引
-    col_indices = [columns.index(col) for col in target_cols]
-    
-    # 收集唯一组合值并按照目标列排序
-    unique_combinations = []
+    v = value.strip()
+    if v == "" or v.upper() == "NULL":
+        return "NULL"
+
+    is_date_col = any(k in col_name.lower() for k in ("date", "day"))
+
+    # ---------- 仅日期列做解析 ----------
+    if is_date_col:
+        if re.fullmatch(r"\d{8}", v):                      # YYYYMMDD
+            return f"'{v[:4]}-{v[4:6]}-{v[6:]}'"
+        if re.fullmatch(r"\d{14}", v):                     # YYYYMMDDhhmmss
+            return f"'{v[:4]}-{v[4:6]}-{v[6:8]} {v[8:10]}:{v[10:12]}:{v[12:]}'"
+        if re.fullmatch(r"\d{2}-[A-Za-z]{3}-\d{2}", v):    # 01-Oct-22
+            dt = datetime.datetime.strptime(v, "%d-%b-%y")
+            return f"'{dt:%Y-%m-%d}'"
+
+    # ---------- 时间字符串 ----------
+    if re.fullmatch(r"\d{1,2}:\d{2}", v):
+        hh, mm = map(int, v.split(":"))
+        return f"'{hh:02d}:{mm:02d}:00'"
+
+    # ---------- 纯数字 ----------
+    if re.fullmatch(r"-?\d+(\.\d+)?", v):
+        return v
+
+    # ---------- 其余按字符串处理 ----------
+    return "'" + v.replace("'", "''") + "'"
+
+
+
+    from typing import List
+
+def generate_insert_sql(
+    table_name: str,
+    raw_text: str,
+    extra_flag: str = "Y",
+    eff_date: str = "2024-01-01",
+    created_by: str = "SYSTEM",
+) -> str:
+    add_extra = (extra_flag.strip().upper() == "Y")
+    raw_text = raw_text.strip()
+    if not raw_text:
+        raise ValueError("raw_text 为空，可能没有正确复制数据")
+
+    # 拆行 + 去除前置空行
+    rows: List[List[str]] = [r.split("\t") for r in raw_text.splitlines()]
+    while rows and not any(c.strip() for c in rows[0]):
+        rows.pop(0)
+    if not rows:
+        raise ValueError("未检测到列名行")
+
+    base_cols = [c.strip() for c in rows[0]]
+    data_rows = rows[1:]
+
+    # 组装 VALUES
+    values = []
     for row in data_rows:
-        combination = tuple(row[i] for i in col_indices)
-        
-        # 创建排序键：尝试数值转换，失败则使用原始值
-        sort_keys = []
-        for value in combination:
-            try:
-                sort_keys.append(int(value))
-            except ValueError:
-                try:
-                    sort_keys.append(float(value))
-                except ValueError:
-                    sort_keys.append(value)
-        
-        unique_combinations.append((tuple(sort_keys), combination))
-    
-    # 去重并排序
-    sorted_combinations = sorted(set(unique_combinations), key=lambda x: x[0])
-    sorted_values = [item[1] for item in sorted_combinations]
-    
-    # 格式化SELECT子句 - 每列单独一行
-    select_clause = ",\n    ".join(columns)
-    
-    # 格式化WHERE子句 - 每行一个元组值
-    where_values = []
-    for tup in sorted_values:
-        quoted_values = [f"'{value}'" for value in tup]
-        where_values.append(f"    ({', '.join(quoted_values)})")
-    
-    # 构建格式化的SQL查询
-    sql = f"""SELECT
-    {select_clause}
-FROM {table_name}
-WHERE ({', '.join(target_cols)}) IN (
-{',\n'.join(where_values)}
-)"""
-    
-    return sql
+        if not any(cell.strip() for cell in row):
+            continue  # 跳过全空行
+        # 补齐缺失列
+        row = row + [""] * (len(base_cols) - len(row))
+        fmt_row = [
+            _fmt_cell(cell, col_name) for col_name, cell in zip(base_cols, row)
+        ]
+        if add_extra:
+            fmt_row += [f"'{eff_date}'", f"'{created_by}'"]
+        values.append("  (" + ", ".join(fmt_row) + ")")
 
-# 示例使用
-if __name__ == "__main__":
-    input_text = """
-scheme_cd  emplr_acct_cd  payroll_group_id  mbr_acct_cd  acct_type  sub_acct_type  fund_code  unit_count  eff_date  record_effective_datetime  record_created_by  record_end_datetime  record_last_updated_by  delete_flag
-                          
-                          
-RB  3100001  PG8000001  8000001  TVC  TVC  SL65  100  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-                          
-                          
-RB  3100002  PG8000002  8000002  SVC  SVC  SLCA  20  45871  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-                          
-                          
-RB  3100003  PG8000003  8000003  PAH  FRVC  SLMIF-B  8  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-RB  3100003  PG8000003  8000003  PAH  FRMC  CRSIF-B  15  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-RB  3100003  PG8000003  8000003  PAH  FRMC  SLRMB-B  12  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-RB  3100004  PG8000004  8000004  REE  ERVC  SLMIF-B  10  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-"""
-    
-    # 定义参数
-    table_name = "tb_account_balance"
-    target_columns = ["mbr_acct_cd", "acct_type", "sub_acct_type", "fund_code"]
-    
-    # 生成SQL
-    sql_query = generate_sorted_sql_query(table_name, input_text, target_columns)
-    print(sql_query)
-```
+    if not values:
+        raise ValueError("没有可插入的数据行")
 
-### 函数优化说明：
+    all_cols = base_cols + (
+        ["record_effective_datetime", "record_created_by"] if add_extra else []
+    )
+    return (
+        f"INSERT INTO {table_name} ({', '.join(all_cols)}) VALUES\n"
+        + ",\n".join(values)
+        + ";"
+    )
 
-1. **通用参数设计**：
-   - `table_name`：指定目标表名
-   - `input_text`：包含表头和数据的文本
-   - `target_cols`：用于WHERE条件的列名列表
+sample = ""scheme_cd	emplr_acct_cd	payroll_group_id	mbr_acct_cd	acct_type	sub_acct_type	fund_cd	unit_count	eff_date	record_effective_datetime	record_created_by	record_end_datetime	record_last_updated_by	delete_flag
+													
+													
+RB	3100001	PG8000001	8000001	TVC	TVC	SL65	100	2025-08-01	20250801235959	SYSTEM	20250801235959	SYSTEM	N
+													
+													
+RB	3100002	PG8000002	8000002	SVC	SVC	SLCA	20	2025-08-02	20250801235959	SYSTEM	20250801235959	SYSTEM	N
+													
+													
+RB	3100003	PG8000003	8000003	PAH	FRVC	SLMIF-B	8	2025-08-01	20250801235959	SYSTEM	20250801235959	SYSTEM	N
+RB	3100003	PG8000003	8000003	PAH	FRMC	CRSIF-B	15	2025-08-01	20250801235959	SYSTEM	20250801235959	SYSTEM	N
+RB	3100003	PG8000003	8000003	PAH	FRMC	SLRMB-B	12	2025-08-01	20250801235959	SYSTEM	20250801235959	SYSTEM	N
+RB	3100004	PG8000004	8000004	REE	ERVC	SLMIF-B	10	2025-08-01	20250801235959	SYSTEM	20250801235959	SYSTEM	N"""
 
-2. **增强健壮性**：
-   - 添加输入验证：检查目标列是否存在
-   - 处理空输入：返回基础查询
-   - 跳过不完整的数据行
-   - 改进数值转换：先尝试整数，再尝试浮点数
-
-3. **灵活的排序机制**：
-   - 按`target_cols`中的列顺序排序
-   - 智能数值转换：自动识别数值类型
-   - 多级排序：处理多个相同主键的情况
-
-4. **错误处理**：
-   - 明确的错误消息（如列不存在）
-   - 优雅处理格式问题
-   - 兼容各种空白字符
-
-5. **代码结构优化**：
-   - 添加函数文档说明
-   - 模块化处理步骤
-   - 清晰的变量命名
-
-### 使用示例：
-
-```python
-# 定义不同目标列
-target_columns_alternative = ["emplr_acct_cd", "mbr_acct_cd"]
-
-# 生成不同条件的SQL
-sql_query = generate_sorted_sql_query(
-    table_name="employee_accounts",
-    input_text=another_input_text,
-    target_cols=target_columns_alternative
-)
-```
-
-### 输出示例：
-
-```sql
-SELECT
-    scheme_cd,
-    emplr_acct_cd,
-    payroll_group_id,
-    mbr_acct_cd,
-    acct_type,
-    sub_acct_type,
-    fund_code,
-    unit_count,
-    eff_date,
-    record_effective_datetime,
-    record_created_by,
-    record_end_datetime,
-    record_last_updated_by,
-    delete_flag
-FROM tb_account_balance
-WHERE (mbr_acct_cd, acct_type, sub_acct_type, fund_code) IN (
-    ('8000001', 'TVC', 'TVC', 'SL65'),
-    ('8000002', 'SVC', 'SVC', 'SLCA'),
-    ('8000003', 'PAH', 'FRVC', 'SLMIF-B'),
-    ('8000003', 'PAH', 'FRMC', 'CRSIF-B'),
-    ('8000003', 'PAH', 'FRMC', 'SLRMB-B'),
-    ('8000004', 'REE', 'ERVC', 'SLMIF-B')
-)
-```
-
-### 关键特点：
-
-1. **完全通用**：适用于任何表结构和目标列
-2. **智能排序**：自动处理数值和字符串排序
-3. **健壮解析**：处理各种空白字符和格式问题
-4. **生产就绪**：包含错误处理和边界情况处理
-5. **符合SQL标准**：生成易于阅读和维护的SQL
-
-此函数可以直接集成到数据处理流程中，用于从文本数据生成数据库查询语句，特别适合数据迁移、ETL处理和报表生成等场景。
+print(generate_insert_sql("tb_fund_price", sample, extra_flag="N"))
