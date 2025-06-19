@@ -1,32 +1,40 @@
-Sub HighlightDifferences()
+Sub HighlightDifferences_Sheet2()
     Dim ws As Worksheet
-    Set ws = ActiveSheet
+    Set ws = ThisWorkbook.Sheets("Sheet2") ' 明确指定Sheet2
     
-    Dim rngB As Range, rngA As Range
-    Set rngB = ws.Range("A277:AW289") '表B范围
-    Set rngA = ws.Range("A253:AW269") '表A范围
+    ' 定义表A（主表）和表B（需标黄表）范围
+    Dim rngA As Range, rngB As Range
+    Set rngA = ws.Range("A253:AW269") ' 表A范围（根据实际调整）
+    Set rngB = ws.Range("A277:AW289") ' 表B范围（根据实际调整）
     
-    rngB.Interior.Pattern = xlNone '清除旧格式
+    ' 清除旧格式
+    rngB.Interior.Pattern = xlNone
     
+    ' 比较逻辑
     Dim cell As Range
-    For Each cell In rngB.Columns(1).Cells '遍历employer_account_code列
+    For Each cell In rngB.Columns(1).Cells ' 遍历表B的employer_account_code列(A列)
         If cell.Value <> "" Then
-            Dim matchRow As Range
-            Set matchRow = rngA.Find(What:=cell.Value, LookIn:=xlValues, LookAt:=xlWhole)
-            
-            If Not matchRow Is Nothing Then
-                If ws.Cells(matchRow.Row, 9).Value = cell.Offset(0, 8).Value Then '检查fund_code
-                    For col = 1 To rngB.Columns.Count
-                        If cell.Offset(0, col - 1).Value <> matchRow.Offset(0, col - 1).Value Then
-                            cell.Offset(0, col - 1).Interior.Color = vbYellow
-                        End If
-                    Next col
+            ' 在表A中查找匹配行（A列和I列双条件）
+            Dim matchRow As Long
+            matchRow = 0
+            For i = 1 To rngA.Rows.Count
+                If rngA.Cells(i, 1).Value = cell.Value And _
+                   rngA.Cells(i, 9).Value = cell.Offset(0, 8).Value Then ' I列是第9列
+                    matchRow = i
+                    Exit For
                 End If
+            Next i
+            
+            ' 如果找到匹配行，逐列比较
+            If matchRow > 0 Then
+                For col = 1 To rngB.Columns.Count
+                    If cell.Offset(0, col - 1).Value <> rngA.Cells(matchRow, col).Value Then
+                        cell.Offset(0, col - 1).Interior.Color = RGB(255, 255, 0) ' 黄色
+                    End If
+                Next col
             End If
         End If
     Next cell
+    
+    MsgBox "差异标记完成！", vbInformation
 End Sub
-=AND(
-  A277<>"",
-  ISNA(MATCH(1, ($A$253:$A$269=A277)*($I$253:$I$269=B277), 0))
-)
