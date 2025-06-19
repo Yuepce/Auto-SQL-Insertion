@@ -19,16 +19,29 @@ def generate_sorted_sql_query(table_name, input_text, target_cols):
         return f"SELECT * FROM {table_name} /* No data provided */"
     
     # 提取列名
-    columns = re.split(r'\s+', lines[0].strip())
+    columns = [col.strip() for col in re.split(r'\t|\s{2,}', lines[0]) if col.strip()]
     
     # 处理数据行
     data_rows = []
     for line in lines[1:]:
-        if not line.strip() or line.isspace():
+        if not line.strip():
             continue
-        row_data = re.split(r'\s+', line.strip())
-        if len(row_data) >= len(columns):  # 确保行数据完整
-            data_rows.append(row_data)
+            
+        # 使用制表符分割，保留空字段
+        row_data = [cell.strip() for cell in line.split('\t')]
+        
+        # 确保至少包含目标列
+        try:
+            col_indices = [columns.index(col) for col in target_cols]
+            if len(row_data) <= max(col_indices):
+                continue  # 跳过不包含目标列的行
+        except ValueError:
+            continue
+        
+        # 补齐缺失列
+        if len(row_data) < len(columns):
+            row_data.extend([''] * (len(columns) - len(row_data)))
+        data_rows.append(row_data)
     
     # 验证目标列是否存在
     for col in target_cols:
@@ -78,90 +91,3 @@ WHERE ({', '.join(target_cols)}) IN (
 )"""
     
     return sql
-
-input_text = """
-scheme_code	account_type	employer_account_code	member_account_code	regular_rebate_applicable	annual_rebate_applicable	regular_rebate_distribution_subacct	regular_rebate_distribution_fund	regular_rebate_calculation_option	regular_rebate_allow_rollover	annual_rebate_allow_rollover	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by	delete_flag
-						Default Benefits / Source Benefits	As per Investment Mandate / As per Original Fund								
-															
-RB	TVC	3100001	8000001	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
-															
-															
-RB	SVC	3100002	8000002	Y	N	Default Benefits	As per Investment Mandate	NAV			20250802 23:59:59	SYSTEM	20250802 23:59:59	SYSTEM	N
-															
-															
-RB	PAH	3100003	8000003	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
-															
-															
-RB	REE	3100004	8000004	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
-															
-															
-RB	CEE	3100005	8000005	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
-															
-															
-															
-RB	SEP	3100006	8000006	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
-															
-															
-RB	TVC	3100007	8000007	Y	N	Default Benefits	As per Investment Mandate	NAV			20250701 23:59:59	SYSTEM	20250701 23:59:59	SYSTEM	N
-RB	TVC	3100008	8000008	Y	N	Default Benefits	As per Investment Mandate	NAV			20250701 23:59:59	SYSTEM	20250701 23:59:59	SYSTEM	N
-RB	SVC	3100021	8000021	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-															
-RB	SVC	3100022	8000022	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-															
-															
-RB	TVC	3100023	8000023	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-RB	TVC	3100024	8000024	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-															
-RB	TVC	3100036	8000036	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-															
-RB	TVC	3100037	8000037	N	N						20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-															
-RB	TVC	3100038	8000038	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-															
-RB	TVC	3100039	8000039	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
-"""
-
-# 定义参数
-table_name = "ra_rebate_details_account"
-target_columns = ["employer_account_code"]
-
-# 生成SQL
-sql_query = generate_sorted_sql_query(table_name, input_text, target_columns)
-print(sql_query)
-
-# 生产结果：
-SELECT
-    scheme_code,
-    account_type,
-    employer_account_code,
-    member_account_code,
-    regular_rebate_applicable,
-    annual_rebate_applicable,
-    regular_rebate_distribution_subacct,
-    regular_rebate_distribution_fund,
-    regular_rebate_calculation_option,
-    regular_rebate_allow_rollover,
-    annual_rebate_allow_rollover,
-    record_creation_datetime,
-    record_created_by,
-    record_last_update_datetime,
-    record_last_updated_by,
-    delete_flag
-FROM ra_rebate_details_account
-WHERE (employer_account_code) IN (
-    ('3100001'),
-    ('3100002'),
-    ('3100003'),
-    ('3100004'),
-    ('3100005'),
-    ('3100006'),
-    ('3100007'),
-    ('3100008'),
-    ('3100021'),
-    ('3100022'),
-    ('3100023'),
-    ('3100024'),
-    ('3100036'),
-    ('3100038'),
-    ('3100039')
-)
