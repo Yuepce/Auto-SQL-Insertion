@@ -79,28 +79,89 @@ WHERE ({', '.join(target_cols)}) IN (
     
     return sql
 
-# 示例使用
-if __name__ == "__main__":
-    input_text = """
-scheme_cd  emplr_acct_cd  payroll_group_id  mbr_acct_cd  acct_type  sub_acct_type  fund_code  unit_count  eff_date  record_effective_datetime  record_created_by  record_end_datetime  record_last_updated_by  delete_flag
-                          
-                          
-RB  3100001  PG8000001  8000001  TVC  TVC  SL65  100  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-                          
-                          
-RB  3100002  PG8000002  8000002  SVC  SVC  SLCA  20  45871  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-                          
-                          
-RB  3100003  PG8000003  8000003  PAH  FRVC  SLMIF-B  8  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-RB  3100003  PG8000003  8000003  PAH  FRMC  CRSIF-B  15  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-RB  3100003  PG8000003  8000003  PAH  FRMC  SLRMB-B  12  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
-RB  3100004  PG8000004  8000004  REE  ERVC  SLMIF-B  10  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+input_text = """
+scheme_code	account_type	employer_account_code	member_account_code	regular_rebate_applicable	annual_rebate_applicable	regular_rebate_distribution_subacct	regular_rebate_distribution_fund	regular_rebate_calculation_option	regular_rebate_allow_rollover	annual_rebate_allow_rollover	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by	delete_flag
+						Default Benefits / Source Benefits	As per Investment Mandate / As per Original Fund								
+															
+RB	TVC	3100001	8000001	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
+															
+															
+RB	SVC	3100002	8000002	Y	N	Default Benefits	As per Investment Mandate	NAV			20250802 23:59:59	SYSTEM	20250802 23:59:59	SYSTEM	N
+															
+															
+RB	PAH	3100003	8000003	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
+															
+															
+RB	REE	3100004	8000004	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
+															
+															
+RB	CEE	3100005	8000005	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
+															
+															
+															
+RB	SEP	3100006	8000006	Y	N	Default Benefits	As per Investment Mandate	NAV			20250801 23:59:59	SYSTEM	20250801 23:59:59	SYSTEM	N
+															
+															
+RB	TVC	3100007	8000007	Y	N	Default Benefits	As per Investment Mandate	NAV			20250701 23:59:59	SYSTEM	20250701 23:59:59	SYSTEM	N
+RB	TVC	3100008	8000008	Y	N	Default Benefits	As per Investment Mandate	NAV			20250701 23:59:59	SYSTEM	20250701 23:59:59	SYSTEM	N
+RB	SVC	3100021	8000021	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
+															
+RB	SVC	3100022	8000022	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
+															
+															
+RB	TVC	3100023	8000023	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
+RB	TVC	3100024	8000024	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
+															
+RB	TVC	3100036	8000036	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
+															
+RB	TVC	3100037	8000037	N	N						20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
+															
+RB	TVC	3100038	8000038	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
+															
+RB	TVC	3100039	8000039	Y	N	Default Benefits	As per Investment Mandate	NAV			20250101 23:59:59	SYSTEM	20250101 23:59:59	SYSTEM	N
 """
-    
-    # 定义参数
-    table_name = "tb_account_balance"
-    target_columns = ["mbr_acct_cd", "acct_type", "sub_acct_type", "fund_code"]
-    
-    # 生成SQL
-    sql_query = generate_sorted_sql_query(table_name, input_text, target_columns)
-    print(sql_query)
+
+# 定义参数
+table_name = "ra_rebate_details_account"
+target_columns = ["employer_account_code"]
+
+# 生成SQL
+sql_query = generate_sorted_sql_query(table_name, input_text, target_columns)
+print(sql_query)
+
+# 生产结果：
+SELECT
+    scheme_code,
+    account_type,
+    employer_account_code,
+    member_account_code,
+    regular_rebate_applicable,
+    annual_rebate_applicable,
+    regular_rebate_distribution_subacct,
+    regular_rebate_distribution_fund,
+    regular_rebate_calculation_option,
+    regular_rebate_allow_rollover,
+    annual_rebate_allow_rollover,
+    record_creation_datetime,
+    record_created_by,
+    record_last_update_datetime,
+    record_last_updated_by,
+    delete_flag
+FROM ra_rebate_details_account
+WHERE (employer_account_code) IN (
+    ('3100001'),
+    ('3100002'),
+    ('3100003'),
+    ('3100004'),
+    ('3100005'),
+    ('3100006'),
+    ('3100007'),
+    ('3100008'),
+    ('3100021'),
+    ('3100022'),
+    ('3100023'),
+    ('3100024'),
+    ('3100036'),
+    ('3100038'),
+    ('3100039')
+)
