@@ -1,13 +1,13 @@
 import re
 
-def generate_sorted_sql_query(table_name, input_text, target_cols):
+def generate_sorted_sql_query(table_name, input_text, target_cols=None):
     """
     根据输入的表内容生成格式化的SQL查询，WHERE条件按目标列排序
     
     参数:
     table_name (str): 数据库表名
     input_text (str): 表内容文本
-    target_cols (list): 用于WHERE条件的目标列名列表
+    target_cols (list/None): 可选，用于WHERE条件的目标列名列表。如果为None则自动选择包含特定关键词的列
     
     返回:
     str: 格式化的SQL查询语句
@@ -20,6 +20,19 @@ def generate_sorted_sql_query(table_name, input_text, target_cols):
     
     # 提取列名
     columns = [col.strip() for col in re.split(r'\t|\s{2,}', lines[0]) if col.strip()]
+    
+    # 自动识别目标列（如果未提供）
+    if target_cols is None:
+        target_cols = [
+            col for col in columns 
+            if any(keyword in col.lower() 
+                  for keyword in ['code', 'cd', 'type', 'date'])
+        ]
+        # 如果没有找到任何符合条件的列，则使用前3列作为默认值
+        if not target_cols and len(columns) >= 3:
+            target_cols = columns[:3]
+        elif not target_cols:
+            target_cols = columns.copy()
     
     # 处理数据行
     data_rows = []
