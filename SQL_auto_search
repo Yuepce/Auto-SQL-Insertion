@@ -1,0 +1,106 @@
+import re
+
+def generate_sorted_sql_query(table_name, input_text, target_cols):
+    """
+    根据输入的表内容生成格式化的SQL查询，WHERE条件按目标列排序
+    
+    参数:
+    table_name (str): 数据库表名
+    input_text (str): 表内容文本
+    target_cols (list): 用于WHERE条件的目标列名列表
+    
+    返回:
+    str: 格式化的SQL查询语句
+    """
+    # 分割文本行并移除空行
+    lines = [line.strip() for line in input_text.split('\n') if line.strip()]
+    
+    if not lines:
+        return f"SELECT * FROM {table_name} /* No data provided */"
+    
+    # 提取列名
+    columns = re.split(r'\s+', lines[0].strip())
+    
+    # 处理数据行
+    data_rows = []
+    for line in lines[1:]:
+        if not line.strip() or line.isspace():
+            continue
+        row_data = re.split(r'\s+', line.strip())
+        if len(row_data) >= len(columns):  # 确保行数据完整
+            data_rows.append(row_data)
+    
+    # 验证目标列是否存在
+    for col in target_cols:
+        if col not in columns:
+            raise ValueError(f"目标列 '{col}' 不在表列中")
+    
+    # 获取目标列的索引
+    col_indices = [columns.index(col) for col in target_cols]
+    
+    # 收集唯一组合值并按照目标列排序
+    unique_combinations = []
+    for row in data_rows:
+        combination = tuple(row[i] for i in col_indices)
+        
+        # 创建排序键：尝试数值转换，失败则使用原始值
+        sort_keys = []
+        for value in combination:
+            try:
+                sort_keys.append(int(value))
+            except ValueError:
+                try:
+                    sort_keys.append(float(value))
+                except ValueError:
+                    sort_keys.append(value)
+        
+        unique_combinations.append((tuple(sort_keys), combination))
+    
+    # 去重并排序
+    sorted_combinations = sorted(set(unique_combinations), key=lambda x: x[0])
+    sorted_values = [item[1] for item in sorted_combinations]
+    
+    # 格式化SELECT子句 - 每列单独一行
+    select_clause = ",\n    ".join(columns)
+    
+    # 格式化WHERE子句 - 每行一个元组值
+    where_values = []
+    for tup in sorted_values:
+        quoted_values = [f"'{value}'" for value in tup]
+        where_values.append(f"    ({', '.join(quoted_values)})")
+    
+    # 构建格式化的SQL查询
+    sql = f"""SELECT
+    {select_clause}
+FROM {table_name}
+WHERE ({', '.join(target_cols)}) IN (
+{',\n'.join(where_values)}
+)"""
+    
+    return sql
+
+# 示例使用
+if __name__ == "__main__":
+    input_text = """
+scheme_cd  emplr_acct_cd  payroll_group_id  mbr_acct_cd  acct_type  sub_acct_type  fund_code  unit_count  eff_date  record_effective_datetime  record_created_by  record_end_datetime  record_last_updated_by  delete_flag
+                          
+                          
+RB  3100001  PG8000001  8000001  TVC  TVC  SL65  100  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+                          
+                          
+RB  3100002  PG8000002  8000002  SVC  SVC  SLCA  20  45871  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+                          
+                          
+RB  3100003  PG8000003  8000003  PAH  FRVC  SLMIF-B  8  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+RB  3100003  PG8000003  8000003  PAH  FRMC  CRSIF-B  15  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+RB  3100003  PG8000003  8000003  PAH  FRMC  SLRMB-B  12  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+RB  3100004  PG8000004  8000004  REE  ERVC  SLMIF-B  10  45870  20250801235959  SYSTEM  20250801235959  SYSTEM  N
+"""
+    
+    # 定义参数
+    table_name = "tb_account_balance"
+    target_columns = ["mbr_acct_cd", "acct_type", "sub_acct_type", "fund_code"]
+    
+    # 生成SQL
+    sql_query = generate_sorted_sql_query(table_name, input_text, target_columns)
+    print(sql_query)
