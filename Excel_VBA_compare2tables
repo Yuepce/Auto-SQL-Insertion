@@ -1,17 +1,24 @@
-def generate_vba_diff_highlighter(table_a_range, table_b_range):
+def generate_vba_diff_highlighter(table_a_range, table_b_range, key_col1='A', key_col2='I'):
     """
-    Generates VBA code to highlight differences between two tables in Excel.
+    Generates VBA code to highlight differences between two tables with dynamic key columns.
     
     Args:
         table_a_range (str): Range of Table A (e.g., "A252:AW269")
         table_b_range (str): Range of Table B (e.g., "A276:AW289")
+        key_col1 (str): Column letter for employer_account_code (default 'A')
+        key_col2 (str): Column letter for fund_code (default 'I')
     
     Returns:
         str: Complete VBA macro code
     """
+    # Convert column letters to numbers
+    col1_num = ord(key_col1.upper()) - 64
+    col2_num = ord(key_col2.upper()) - 64
+    col2_offset = col2_num - col1_num  # Calculate offset from first key column
+    
     vba_code = f"""Sub HighlightDifferences()
     Dim ws As Worksheet
-    Set ws = ActiveSheet ' Or specify sheet like ThisWorkbook.Sheets("Sheet2")
+    Set ws = ActiveSheet
     
     ' Define table ranges
     Dim rngA As Range, rngB As Range
@@ -21,16 +28,21 @@ def generate_vba_diff_highlighter(table_a_range, table_b_range):
     ' Clear existing formatting
     rngB.Interior.Pattern = xlNone
     
+    ' Key column configuration
+    Const KEY_COL1 As Integer = {col1_num}  ' {key_col1} (employer_account_code)
+    Const KEY_COL2 As Integer = {col2_num}  ' {key_col2} (fund_code)
+    Const COL2_OFFSET As Integer = {col2_offset}  ' Column offset between keys
+    
     ' Comparison logic
     Dim cell As Range
-    For Each cell In rngB.Columns(1).Cells ' Loop through employer_account_code column (A)
+    For Each cell In rngB.Columns(KEY_COL1).Cells
         If cell.Value <> "" Then
-            ' Find matching row in Table A (A and I columns)
+            ' Find matching row in Table A
             Dim matchRow As Long
             matchRow = 0
             For i = 1 To rngA.Rows.Count
-                If rngA.Cells(i, 1).Value = cell.Value And _
-                   rngA.Cells(i, 9).Value = cell.Offset(0, 8).Value Then ' Column I is 9
+                If rngA.Cells(i, KEY_COL1).Value = cell.Value And _
+                   rngA.Cells(i, KEY_COL2).Value = cell.Offset(0, COL2_OFFSET).Value Then
                     matchRow = i
                     Exit For
                 End If
@@ -51,6 +63,15 @@ def generate_vba_diff_highlighter(table_a_range, table_b_range):
 End Sub
 """
     return vba_code
+
+# Example usage:
+vba_script = generate_vba_diff_highlighter(
+    table_a_range="A253:AW269",
+    table_b_range="A277:AW289",
+    key_col1='A',  # employer_account_code column
+    key_col2='I'   # fund_code column
+)
+print(vba_script)
 
 # Example usage:
 table_a = "A253:AW269"  # First data row is 253
