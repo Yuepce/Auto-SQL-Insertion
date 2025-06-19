@@ -1,13 +1,31 @@
-=AND(
-  A277<>"",
-  SUMPRODUCT(($A$253:$A$269=A277)*($I$253:$I$269=I277))>0,
-  A277<>INDEX(
-    $A$253:$AW$269,
-    MATCH(1, ($A$253:$A$269=A277)*($I$253:$I$269=I277), 0),
-    COLUMN(A277)
-  )
-)
-
+Sub HighlightDifferences()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Dim rngB As Range, rngA As Range
+    Set rngB = ws.Range("A277:AW289") '表B范围
+    Set rngA = ws.Range("A253:AW269") '表A范围
+    
+    rngB.Interior.Pattern = xlNone '清除旧格式
+    
+    Dim cell As Range
+    For Each cell In rngB.Columns(1).Cells '遍历employer_account_code列
+        If cell.Value <> "" Then
+            Dim matchRow As Range
+            Set matchRow = rngA.Find(What:=cell.Value, LookIn:=xlValues, LookAt:=xlWhole)
+            
+            If Not matchRow Is Nothing Then
+                If ws.Cells(matchRow.Row, 9).Value = cell.Offset(0, 8).Value Then '检查fund_code
+                    For col = 1 To rngB.Columns.Count
+                        If cell.Offset(0, col - 1).Value <> matchRow.Offset(0, col - 1).Value Then
+                            cell.Offset(0, col - 1).Interior.Color = vbYellow
+                        End If
+                    Next col
+                End If
+            End If
+        End If
+    Next cell
+End Sub
 =AND(
   A277<>"",
   ISNA(MATCH(1, ($A$253:$A$269=A277)*($I$253:$I$269=B277), 0))
