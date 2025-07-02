@@ -1,4 +1,110 @@
+import re
 
+def generate_sorted_sql_query(table_name, input_text, target_cols=None):
+    """
+    根据输入的表内容生成格式化的SQL查询，WHERE条件按目标列排序
+    
+    参数:
+    table_name (str): 数据库表名
+    input_text (str): 表内容文本
+    target_cols (list/None): 可选，用于WHERE条件的目标列名列表。如果为None则自动选择包含特定关键词的列
+    
+    返回:
+    str: 格式化的SQL查询语句
+    """
+    # 分割文本行并移除空行
+    lines = [line.strip() for line in input_text.split('\n') if line.strip()]
+    
+    if not lines:
+        return f"SELECT * FROM {table_name} /* No data provided */"
+    
+    # 提取列名（支持制表符和多个空格）
+    columns = [col.strip() for col in re.split(r'\t|\s{2,}', lines[0]) if col.strip()]
+    
+    # 自动识别目标列（如果未提供）
+    if target_cols is None:
+        target_cols = [
+            col for col in columns 
+            if any(keyword in col.lower() 
+                  for keyword in ['code', 'cd', 'type', 'date'])
+        ]
+        # 如果没有找到任何符合条件的列，则使用前3列作为默认值
+        if not target_cols and len(columns) >= 3:
+            target_cols = columns[:3]
+        elif not target_cols:
+            target_cols = columns.copy()
+    
+    # 处理数据行：使用正则表达式处理空格分隔的数据
+    data_rows = []
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+            
+        # 使用正则表达式分割多个连续空格（保留空字段）
+        row_data = [cell.strip() for cell in re.split(r'\s{2,}', line)]
+        
+        # 确保行数据长度与列数匹配
+        if len(row_data) < len(columns):
+            row_data.extend([''] * (len(columns) - len(row_data)))
+        elif len(row_data) > len(columns):
+            row_data = row_data[:len(columns)]
+            
+        data_rows.append(row_data)
+    
+    # 验证目标列是否存在
+    for col in target_cols:
+        if col not in columns:
+            raise ValueError(f"目标列 '{col}' 不在表列中")
+    
+    # 获取目标列的索引
+    col_indices = [columns.index(col) for col in target_cols]
+    
+    # 收集唯一组合值并按照目标列排序
+    unique_combinations = []
+    for row in data_rows:
+        combination = tuple(row[i] for i in col_indices)
+        
+        # 创建排序键：尝试数值转换，失败则使用原始值
+        sort_keys = []
+        for value in combination:
+            try:
+                sort_keys.append(int(value))
+            except ValueError:
+                try:
+                    sort_keys.append(float(value))
+                except ValueError:
+                    sort_keys.append(value)
+        
+        unique_combinations.append((tuple(sort_keys), combination))
+    
+    # 去重并排序
+    sorted_combinations = sorted(set(unique_combinations), key=lambda x: x[0])
+    sorted_values = [item[1] for item in sorted_combinations]
+    
+    # 格式化SELECT子句 - 每列单独一行
+    select_clause = ",\n    ".join(columns)
+    
+    # 格式化WHERE子句 - 每行一个元组值（空值转换为NULL）
+    where_values = []
+    for tup in sorted_values:
+        quoted_values = []
+        for value in tup:
+            # 空值转换为SQL的NULL
+            if value == '':
+                quoted_values.append('NULL')
+            else:
+                quoted_values.append(f"'{value}'")
+        where_values.append(f"    ({', '.join(quoted_values)})")
+    
+    # 构建格式化的SQL查询
+    sql = f"""SELECT
+    {select_clause}
+FROM {table_name}
+WHERE ({', '.join(target_cols)}) IN (
+{',\n'.join(where_values)}
+);"""
+    
+    return sql
 
 
 
