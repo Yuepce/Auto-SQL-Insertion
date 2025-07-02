@@ -104,3 +104,26 @@ WHERE ({', '.join(target_cols)}) IN (
 )"""
     
     return sql
+
+
+# 示例使用
+# if __name__ == "__main__":
+
+input_text = """
+scheme_cd	emplr_acct_cd	emplr_acct_type	dummy_acct_flg	enrol_ref_no	company_nm	status_cd	fund_clss_typ_id	delete_flag	record_effective_datetime	record_created_by	record_end_datetime	record_last_updated_by
+RB	20000100	ER		ENF20000100	100 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+RB	8800000	PAH	Y	ENF200100010	Ying Ying Chan PAH	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+RB	20000101	ER		ENF20000101	101 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+RB	8800001	PAH	Y	ENF200100011	Yun Yi Man PAH	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+RB	20000102	ER		ENF20000102	102 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+												
+RB	8800002	PAH	Y	ENF200100012	Wai Chun Lee PAH	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+RB	20000103	ER		ENF20000103	103 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+"""
+
+# 定义参数
+table_name = "tb_employer_account"
+
+# 生成SQL
+sql_query = generate_sorted_sql_query(table_name, input_text)
+print(sql_query)
