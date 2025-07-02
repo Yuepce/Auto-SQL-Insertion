@@ -98,3 +98,35 @@ print(generate_insert_sql("demo", sample, extra_flag="N"))
 print(generate_insert_sql("demo", sample, extra_flag="Y"))
 
 
+
+
+
+
+
+
+
+
+
+# 示例使用
+if __name__ == "__main__":
+    input_text = """
+    DELETE_FLAG EMPLR_ACCT_CD STATUS_CD ORIG_EMPLR_CD
+    N 6600449990 ACTIVE 
+    N 6600449991 ACTIVE 
+    N 6600449992 ACTIVE 
+    N 6600449993 ACTIVE 
+    N 6600449994 ACTIVE 315968
+    N 6600449995 ACTIVE 321424
+    N 6600449996 ACTIVE 327393
+    Y 6600449997 ACTIVE 
+    N 6600449998 ACTIVE 
+    N 6600449999 ACTIVE 
+    N 6600450000 ACTIVE 
+    N 6600450001 ACTIVE 
+    """
+
+    table_name = "tb_employer_account"
+    sql_query = generate_sorted_sql_query(table_name, input_text)
+    print(sql_query)
+
+
