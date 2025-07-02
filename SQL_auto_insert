@@ -1,3 +1,34 @@
+### 主要改进：
+
+1. **灵活的额外列支持**：
+   - 添加 `extra_cols` 参数（字典类型），用于指定要插入的额外列及其值
+   - 格式：`{列名1: 值1, 列名2: 值2, ...}`
+   - 默认值为 `None`（不添加额外列）
+
+2. **简化函数签名**：
+   - 移除了 `extra_flag`, `eff_date`, `created_by` 等特定参数
+   - 通过 `extra_cols` 统一处理所有额外列
+
+3. **增强数据解析健壮性**：
+   - 改进空行处理逻辑
+   - 确保数据行与列名数量匹配
+   - 优化日期/时间解析的错误处理
+
+4. **通用性设计**：
+   - 适用于任何表结构和数据格式
+   - 支持添加任意数量和类型的额外列
+
+### 关键特点：
+
+1. **完全通用**：适用于任何表结构和数据类型
+2. **智能格式化**：自动识别日期、时间、数字等类型
+3. **灵活扩展**：支持动态添加任意数量和类型的列
+4. **健壮处理**：优雅处理各种格式问题和边缘情况
+5. **符合SQL标准**：生成易于阅读和维护的SQL语句
+
+这个函数可以直接集成到您的数据处理流程中，用于从文本数据生成数据库插入语句，特别适合数据迁移、ETL处理和批量数据导入等场景。
+
+################################################################################################################################
 import re
 import datetime
 from typing import List, Dict, Optional
@@ -118,8 +149,8 @@ def generate_insert_sql(
     )
 
 # 使用示例
-if __name__ == "__main__":
-    sample = """scheme_cd	fund_cd	efctv_date	bid_price_cnt	offr_price_cnt	record_effective_datetime	record_created_by	record_end_datetime	record_last_updated_by	delete_flag
+# if __name__ == "__main__":
+sample = """scheme_cd	fund_cd	efctv_date	bid_price_cnt	offr_price_cnt	record_effective_datetime	record_created_by	record_end_datetime	record_last_updated_by	delete_flag
 									
 RB	SLRMB-B	2025-08-01	60	60	20250801235959	SYSTEM	20250801235959	SYSTEM	N
 RB	SLMIF-B	2025-08-01	30	30	20250801235959	SYSTEM	20250801235959	SYSTEM	N
@@ -150,54 +181,21 @@ RB	SLMIF	2025-07-01	35	35	20250801235959	SYSTEM	20250801235959	SYSTEM	N
 RB	SLCA	2025-07-01	15	15	20250801235959	SYSTEM	20250801235959	SYSTEM	N
 RB	CRHKE-B	2025-07-01	25	25	20250801235959	SYSTEM	20250801235959	SYSTEM	N"""
 
-    # 示例1: 不添加额外列
-    print("示例1: 不添加额外列")
-    print(generate_insert_sql("tb_fund_price", sample))
-    
-    # 示例2: 添加额外列
-    print("\n示例2: 添加额外列")
-    extra_columns = {
-        "record_effective_datetime": "20240101",
-        "record_created_by": "ADMIN",
-        "custom_flag": "Y"
-    }
-    print(generate_insert_sql("tb_fund_price", sample, extra_columns))
+# 示例1: 不添加额外列
+print("示例1: 不添加额外列")
+print(generate_insert_sql("tb_fund_price", sample))
 
-
-### 主要改进：
-
-1. **灵活的额外列支持**：
-   - 添加 `extra_cols` 参数（字典类型），用于指定要插入的额外列及其值
-   - 格式：`{列名1: 值1, 列名2: 值2, ...}`
-   - 默认值为 `None`（不添加额外列）
-
-2. **简化函数签名**：
-   - 移除了 `extra_flag`, `eff_date`, `created_by` 等特定参数
-   - 通过 `extra_cols` 统一处理所有额外列
-
-3. **增强数据解析健壮性**：
-   - 改进空行处理逻辑
-   - 确保数据行与列名数量匹配
-   - 优化日期/时间解析的错误处理
-
-4. **通用性设计**：
-   - 适用于任何表结构和数据格式
-   - 支持添加任意数量和类型的额外列
-
-### 使用示例：
-
-```python
-# 1. 不添加额外列
-sql1 = generate_insert_sql("tb_fund_price", sample_data)
-
-# 2. 添加额外列
-extra_cols = {
-    "record_effective_datetime": "20240101",
-    "record_created_by": "ADMIN",
-    "custom_flag": "Y"
+# 示例2: 添加额外列
+print("\n示例2: 添加额外列")
+extra_columns = {
+"record_effective_datetime": "20240101",
+"record_created_by": "ADMIN",
+"custom_flag": "Y"
 }
-sql2 = generate_insert_sql("tb_fund_price", sample_data, extra_cols)
-```
+print(generate_insert_sql("tb_fund_price", sample, extra_columns))
+
+
+################################################################################################################################
 
 ### 输出示例：
 
@@ -213,12 +211,4 @@ INSERT INTO tb_fund_price (scheme_cd, fund_cd, efctv_date, bid_price_cnt, offr_p
   ...;
 ```
 
-### 关键特点：
 
-1. **完全通用**：适用于任何表结构和数据类型
-2. **智能格式化**：自动识别日期、时间、数字等类型
-3. **灵活扩展**：支持动态添加任意数量和类型的列
-4. **健壮处理**：优雅处理各种格式问题和边缘情况
-5. **符合SQL标准**：生成易于阅读和维护的SQL语句
-
-这个函数可以直接集成到您的数据处理流程中，用于从文本数据生成数据库插入语句，特别适合数据迁移、ETL处理和批量数据导入等场景。
