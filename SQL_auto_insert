@@ -196,3 +196,136 @@ INSERT INTO tb_employer_account (DELETE_FLAG, EMPLR_ACCT_CD, PAYROLL_GROUP_ID, M
 
 
 
+
+import re
+import datetime
+from typing import List, Dict, Optional
+
+def _fmt_cell(value: str, col_name: str) -> str:
+    """
+    把单元格文本转换为 SQL value。
+    仅当列名含 'date' 或 'day' 时，才尝试把 8/14 位数字解析为日期 / 日期时间。
+    """
+    v = value.strip()
+    if v == "" or v.upper() == "NULL":
+        return "NULL"
+
+    is_date_col = any(k in col_name.lower() for k in ("date", "day"))
+
+    # ---------- 仅日期列做解析 ----------
+    if is_date_col:
+        if re.fullmatch(r"\d{8}", v):                      # YYYYMMDD
+            return f"'{v[:4]}-{v[4:6]}-{v[6:]}'"
+        if re.fullmatch(r"\d{14}", v):                     # YYYYMMDDhhmmss
+            return f"'{v[:4]}-{v[4:6]}-{v[6:8]} {v[8:10]}:{v[10:12]}:{v[12:]}'"
+        if re.fullmatch(r"\d{2}-[A-Za-z]{3}-\d{2}", v):    # 01-Oct-22
+            try:
+                dt = datetime.datetime.strptime(v, "%d-%b-%y")
+                return f"'{dt:%Y-%m-%d}'"
+            except ValueError:
+                pass  # 解析失败则按普通字符串处理
+
+    # ---------- 时间字符串 ----------
+    if re.fullmatch(r"\d{1,2}:\d{2}(:\d{2})?", v):
+        parts = v.split(":")
+        if len(parts) == 2:  # 小时:分钟
+            hh, mm = map(int, parts)
+            return f"'{hh:02d}:{mm:02d}:00'"
+        elif len(parts) == 3:  # 小时:分钟:秒
+            hh, mm, ss = map(int, parts)
+            return f"'{hh:02d}:{mm:02d}:{ss:02d}'"
+
+    # ---------- 纯数字 ----------
+    # 整数（处理前导零问题）
+    if re.fullmatch(r"-?\d+", v):
+        return v
+    # 浮点数
+    if re.fullmatch(r"-?\d+\.\d+", v):
+        return v
+
+    # ---------- 其余按字符串处理 ----------
+    return "'" + v.replace("'", "''") + "'"
+
+def generate_insert_sql(
+    table_name: str,
+    raw_text: str,
+    extra_cols: Optional[Dict[str, str]] = None
+) -> str:
+    """
+    生成INSERT SQL语句
+    
+    参数:
+    table_name: 数据库表名
+    raw_text: 包含表头和数据的文本（制表符分隔）
+    extra_cols: 可选，要添加的额外列及其值（字典格式：{列名: 值}）
+    
+    返回:
+    str: 格式化的INSERT SQL语句
+    """
+    # 处理额外列参数
+    extra_cols = extra_cols or {}
+    
+    raw_text = raw_text.strip()
+    if not raw_text:
+        raise ValueError("raw_text 为空，可能没有正确复制数据")
+
+    # 拆行 + 去除空行
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("未检测到有效数据")
+
+    # 解析列名
+    base_cols = [col.strip() for col in lines[0].split("\t") if col.strip()]
+    if not base_cols:
+        raise ValueError("未检测到列名行")
+
+    # 处理数据行 - 修复：处理所有行，包括有缺失列的行
+    data_rows = []
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+            
+        # 分割单元格并填充缺失值
+        cells = [cell.strip() for cell in line.split("\t")]
+        
+        # 确保单元格数量与列头匹配
+        if len(cells) < len(base_cols):
+            # 填充缺失的单元格
+            cells.extend([''] * (len(base_cols) - len(cells)))
+        elif len(cells) > len(base_cols):
+            # 截断多余的单元格
+            cells = cells[:len(base_cols)]
+            
+        data_rows.append(cells)
+
+    if not data_rows:
+        raise ValueError("没有可插入的数据行")
+
+    # 组装 VALUES
+    values = []
+    for row in data_rows:
+        # 格式化每列的值
+        fmt_row = [
+            _fmt_cell(cell, col_name) 
+            for col_name, cell in zip(base_cols, row)
+        ]
+        
+        # 添加额外列的值
+        for col_name, value in extra_cols.items():
+            fmt_row.append(_fmt_cell(value, col_name))
+        
+        values.append("  (" + ", ".join(fmt_row) + ")")
+
+    # 构建完整列名列表
+    all_cols = base_cols + list(extra_cols.keys())
+    
+    return (
+        f"INSERT INTO {table_name} ({', '.join(all_cols)}) VALUES\n"
+        + ",\n".join(values)
+        + ";"
+    )
+
+
+
+
+
