@@ -18,7 +18,7 @@ def generate_sorted_sql_query(table_name, input_text, target_cols=None):
     if not lines:
         return f"SELECT * FROM {table_name} /* No data provided */"
     
-    # 提取列名
+    # 提取列名（支持制表符和多个空格）
     columns = [col.strip() for col in re.split(r'\t|\s{2,}', lines[0]) if col.strip()]
     
     # 自动识别目标列（如果未提供）
@@ -34,26 +34,21 @@ def generate_sorted_sql_query(table_name, input_text, target_cols=None):
         elif not target_cols:
             target_cols = columns.copy()
     
-    # 处理数据行
+    # 处理数据行：使用正则表达式处理空格分隔的数据
     data_rows = []
     for line in lines[1:]:
         if not line.strip():
             continue
             
-        # 使用制表符分割，保留空字段
-        row_data = [cell.strip() for cell in line.split('\t')]
+        # 使用正则表达式分割多个连续空格（保留空字段）
+        row_data = [cell.strip() for cell in re.split(r'\s{2,}', line)]
         
-        # 确保至少包含目标列
-        try:
-            col_indices = [columns.index(col) for col in target_cols]
-            if len(row_data) <= max(col_indices):
-                continue  # 跳过不包含目标列的行
-        except ValueError:
-            continue
-        
-        # 补齐缺失列
+        # 确保行数据长度与列数匹配
         if len(row_data) < len(columns):
             row_data.extend([''] * (len(columns) - len(row_data)))
+        elif len(row_data) > len(columns):
+            row_data = row_data[:len(columns)]
+            
         data_rows.append(row_data)
     
     # 验证目标列是否存在
@@ -89,10 +84,16 @@ def generate_sorted_sql_query(table_name, input_text, target_cols=None):
     # 格式化SELECT子句 - 每列单独一行
     select_clause = ",\n    ".join(columns)
     
-    # 格式化WHERE子句 - 每行一个元组值
+    # 格式化WHERE子句 - 每行一个元组值（空值转换为NULL）
     where_values = []
     for tup in sorted_values:
-        quoted_values = [f"'{value}'" for value in tup]
+        quoted_values = []
+        for value in tup:
+            # 空值转换为SQL的NULL
+            if value == '':
+                quoted_values.append('NULL')
+            else:
+                quoted_values.append(f"'{value}'")
         where_values.append(f"    ({', '.join(quoted_values)})")
     
     # 构建格式化的SQL查询
@@ -101,29 +102,28 @@ def generate_sorted_sql_query(table_name, input_text, target_cols=None):
 FROM {table_name}
 WHERE ({', '.join(target_cols)}) IN (
 {',\n'.join(where_values)}
-)"""
+);"""
     
     return sql
 
-
 # 示例使用
 # if __name__ == "__main__":
-
 input_text = """
-scheme_cd	emplr_acct_cd	emplr_acct_type	dummy_acct_flg	enrol_ref_no	company_nm	status_cd	fund_clss_typ_id	delete_flag	record_effective_datetime	record_created_by	record_end_datetime	record_last_updated_by
-RB	20000100	ER		ENF20000100	100 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
-RB	8800000	PAH	Y	ENF200100010	Ying Ying Chan PAH	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
-RB	20000101	ER		ENF20000101	101 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
-RB	8800001	PAH	Y	ENF200100011	Yun Yi Man PAH	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
-RB	20000102	ER		ENF20000102	102 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
-												
-RB	8800002	PAH	Y	ENF200100012	Wai Chun Lee PAH	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
-RB	20000103	ER		ENF20000103	103 Company Limited	ACTIVE	A	N	2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM
+DELETE_FLAG EMPLR_ACCT_CD STATUS_CD ORIG_EMPLR_CD
+N 6600449990 ACTIVE 
+N 6600449991 ACTIVE 
+N 6600449992 ACTIVE 
+N 6600449993 ACTIVE 
+N 6600449994 ACTIVE 315968
+N 6600449995 ACTIVE 321424
+N 6600449996 ACTIVE 327393
+Y 6600449997 ACTIVE 
+N 6600449998 ACTIVE 
+N 6600449999 ACTIVE 
+N 6600450000 ACTIVE 
+N 6600450001 ACTIVE 
 """
 
-# 定义参数
 table_name = "tb_employer_account"
-
-# 生成SQL
 sql_query = generate_sorted_sql_query(table_name, input_text)
 print(sql_query)
