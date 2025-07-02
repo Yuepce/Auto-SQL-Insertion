@@ -28,175 +28,6 @@
 
 这个函数可以直接集成到您的数据处理流程中，用于从文本数据生成数据库插入语句，特别适合数据迁移、ETL处理和批量数据导入等场景。
 
-################################################################################################################################
-请帮我修改以下代码： 使得实际输出完整的全部输入数据，不仅仅是输出insert数据中完整的那一行，而是所有行（包括最后一列为Null）的值。
-
-import re
-import datetime
-from typing import List, Dict, Optional
-
-def _fmt_cell(value: str, col_name: str) -> str:
-    """
-    把单元格文本转换为 SQL value。
-    仅当列名含 'date' 或 'day' 时，才尝试把 8/14 位数字解析为日期 / 日期时间。
-    """
-    v = value.strip()
-    if v == "" or v.upper() == "NULL":
-        return "NULL"
-
-    is_date_col = any(k in col_name.lower() for k in ("date", "day"))
-
-    # ---------- 仅日期列做解析 ----------
-    if is_date_col:
-        if re.fullmatch(r"\d{8}", v):                      # YYYYMMDD
-            return f"'{v[:4]}-{v[4:6]}-{v[6:]}'"
-        if re.fullmatch(r"\d{14}", v):                     # YYYYMMDDhhmmss
-            return f"'{v[:4]}-{v[4:6]}-{v[6:8]} {v[8:10]}:{v[10:12]}:{v[12:]}'"
-        if re.fullmatch(r"\d{2}-[A-Za-z]{3}-\d{2}", v):    # 01-Oct-22
-            try:
-                dt = datetime.datetime.strptime(v, "%d-%b-%y")
-                return f"'{dt:%Y-%m-%d}'"
-            except ValueError:
-                pass  # 解析失败则按普通字符串处理
-
-    # ---------- 时间字符串 ----------
-    if re.fullmatch(r"\d{1,2}:\d{2}(:\d{2})?", v):
-        parts = v.split(":")
-        if len(parts) == 2:  # 小时:分钟
-            hh, mm = map(int, parts)
-            return f"'{hh:02d}:{mm:02d}:00'"
-        elif len(parts) == 3:  # 小时:分钟:秒
-            hh, mm, ss = map(int, parts)
-            return f"'{hh:02d}:{mm:02d}:{ss:02d}'"
-
-    # ---------- 纯数字 ----------
-    # 整数（处理前导零问题）
-    if re.fullmatch(r"-?\d+", v):
-        return v
-    # 浮点数
-    if re.fullmatch(r"-?\d+\.\d+", v):
-        return v
-
-    # ---------- 其余按字符串处理 ----------
-    return "'" + v.replace("'", "''") + "'"
-
-def generate_insert_sql(
-    table_name: str,
-    raw_text: str,
-    extra_cols: Optional[Dict[str, str]] = None
-) -> str:
-    """
-    生成INSERT SQL语句
-    
-    参数:
-    table_name: 数据库表名
-    raw_text: 包含表头和数据的文本（制表符分隔）
-    extra_cols: 可选，要添加的额外列及其值（字典格式：{列名: 值}）
-    
-    返回:
-    str: 格式化的INSERT SQL语句
-    """
-    # 处理额外列参数
-    extra_cols = extra_cols or {}
-    
-    raw_text = raw_text.strip()
-    if not raw_text:
-        raise ValueError("raw_text 为空，可能没有正确复制数据")
-
-    # 拆行 + 去除空行
-    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-    if not lines:
-        raise ValueError("未检测到有效数据")
-
-    # 解析列名
-    base_cols = [col.strip() for col in lines[0].split("\t") if col.strip()]
-    if not base_cols:
-        raise ValueError("未检测到列名行")
-
-    # 处理数据行
-    data_rows = []
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-        cells = [cell.strip() for cell in line.split("\t")]
-        # 跳过空行和列数不足的行
-        if any(cells) and len(cells) >= len(base_cols):
-            data_rows.append(cells[:len(base_cols)])  # 截取与列名匹配的部分
-
-    if not data_rows:
-        raise ValueError("没有可插入的数据行")
-
-    # 组装 VALUES
-    values = []
-    for row in data_rows:
-        # 格式化每列的值
-        fmt_row = [
-            _fmt_cell(cell, col_name) 
-            for col_name, cell in zip(base_cols, row)
-        ]
-        
-        # 添加额外列的值
-        for col_name, value in extra_cols.items():
-            fmt_row.append(_fmt_cell(value, col_name))
-        
-        values.append("  (" + ", ".join(fmt_row) + ")")
-
-    # 构建完整列名列表
-    all_cols = base_cols + list(extra_cols.keys())
-    
-    return (
-        f"INSERT INTO {table_name} ({', '.join(all_cols)}) VALUES\n"
-        + ",\n".join(values)
-        + ";"
-    )
-
-
-
-# 使用示例
-# if __name__ == "__main__":
-
-sample = """
-DELETE_FLAG	EMPLR_ACCT_CD	PAYROLL_GROUP_ID	MBR_ACCT_CD	MBR_ACCT_TYPE	STATUS_CD	GENDER	DATE_OF_BIRTH	DATE_JOINING_THE_SCHM	TERM_DATE
-N	6600449990	LY001	88334400	REE	ACTIVE	M	20000701	20180630	 
-N	6600449991	LY002	88334401	REE	TERMG	M	19900515	20150630	 
-N	6600449992	LY003	88334402	REE	PROVISIONAL	F	19850310	20150630	 
-Y	6600449993	LY004	88334403	REE	TEMP	F	19751225	20100630	 
-N	6600449994	LY005	88334404	REE	ACTIVE	M	19650830	20170810	 
-N	6600449995	LY006	88334405	REE	TERMG	F	19551120	20180630	 
-N	6600449996	LY007	88334406	REE	ACTIVE	M	19830909	20050810	 
-N	6600449997	LY008	88334407	REE	ACTIVE	M	19950302	20010810	 
-N	6600449998	LY009	88334408	REE	TERMD	F	19981009	20120810	20250131
-N	6600449999	LY010	88334409	REE	TERMG	M	19960617	20000218	 
-N	6600450000	LY011	88334410	REE	ACTIVE	M	19920429	20041229	 
-N	6600450001	LY012	88334411	REE	ACTIVE	F	19710303	20101122
-"""
-
-# 示例1: 不添加额外列
-# print("示例1: 不添加额外列")
-print(generate_insert_sql("tb_employer_account", sample))
-
-# 示例2: 添加额外列
-print("\n示例2: 添加额外列")
-extra_columns = {
-    # "record_effective_datetime": "2024-01-01 00:00:00",
-    # "record_created_by": "SYSTEM",
-    "account_type": "test"
-}
-print(generate_insert_sql("tb_employer_account", sample, extra_columns))
-
-实际输出：
-示例1: 不添加额外列
-INSERT INTO tb_employer_account (DELETE_FLAG, EMPLR_ACCT_CD, PAYROLL_GROUP_ID, MBR_ACCT_CD, MBR_ACCT_TYPE, STATUS_CD, GENDER, DATE_OF_BIRTH, DATE_JOINING_THE_SCHM, TERM_DATE) VALUES
-  ('N', 6600449998, 'LY009', 88334408, 'REE', 'TERMD', 'F', '1998-10-09', '2012-08-10', '2025-01-31');
-
-示例2: 添加额外列
-INSERT INTO tb_employer_account (DELETE_FLAG, EMPLR_ACCT_CD, PAYROLL_GROUP_ID, MBR_ACCT_CD, MBR_ACCT_TYPE, STATUS_CD, GENDER, DATE_OF_BIRTH, DATE_JOINING_THE_SCHM, TERM_DATE, account_type) VALUES
-  ('N', 6600449998, 'LY009', 88334408, 'REE', 'TERMD', 'F', '1998-10-09', '2012-08-10', '2025-01-31', 'test');
-
-
-
-
-
 import re
 import datetime
 from typing import List, Dict, Optional
@@ -325,6 +156,39 @@ def generate_insert_sql(
         + ";"
     )
 
+
+# 使用示例
+# if __name__ == "__main__":
+
+sample = """
+DELETE_FLAG	EMPLR_ACCT_CD	PAYROLL_GROUP_ID	MBR_ACCT_CD	MBR_ACCT_TYPE	STATUS_CD	GENDER	DATE_OF_BIRTH	DATE_JOINING_THE_SCHM	TERM_DATE
+N	6600449990	LY001	88334400	REE	ACTIVE	M	20000701	20180630	 
+N	6600449991	LY002	88334401	REE	TERMG	M	19900515	20150630	 
+N	6600449992	LY003	88334402	REE	PROVISIONAL	F	19850310	20150630	 
+Y	6600449993	LY004	88334403	REE	TEMP	F	19751225	20100630	 
+N	6600449994	LY005	88334404	REE	ACTIVE	M	19650830	20170810	 
+N	6600449995	LY006	88334405	REE	TERMG	F	19551120	20180630	 
+N	6600449996	LY007	88334406	REE	ACTIVE	M	19830909	20050810	 
+N	6600449997	LY008	88334407	REE	ACTIVE	M	19950302	20010810	 
+N	6600449998	LY009	88334408	REE	TERMD	F	19981009	20120810	20250131
+N	6600449999	LY010	88334409	REE	TERMG	M	19960617	20000218	 
+N	6600450000	LY011	88334410	REE	ACTIVE	M	19920429	20041229	 
+N	6600450001	LY012	88334411	REE	ACTIVE	F	19710303	20101122
+"""
+
+# 示例1: 不添加额外列
+# print("示例1: 不添加额外列")
+print(generate_insert_sql("tb_employer_account", sample))
+
+# 示例2: 添加额外列
+print("\n示例2: 添加额外列")
+extra_columns = {
+    # "record_effective_datetime": "2024-01-01 00:00:00",
+    # "record_created_by": "SYSTEM",
+    "account_type": "test"
+}
+
+print(generate_insert_sql("tb_employer_account", sample, extra_columns))
 
 
 
