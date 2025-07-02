@@ -18,38 +18,45 @@ def generate_sorted_sql_query(table_name, input_text, target_cols=None):
     if not lines:
         return f"SELECT * FROM {table_name} /* No data provided */"
     
-    # 提取列名（支持制表符和多个空格）
-    columns = [col.strip() for col in re.split(r'\t|\s{2,}', lines[0]) if col.strip()]
+    # 提取列名 - 使用正则匹配任意空格分隔
+    columns = re.split(r'\s+', lines[0])
+    columns = [col.strip() for col in columns if col.strip()]
     
-    # 自动识别目标列（如果未提供）
+    # 自动识别目标列（如果未提供） - 简化选择逻辑
     if target_cols is None:
-        target_cols = [
+        # 优先选择包含关键字的列
+        priority_cols = [
             col for col in columns 
             if any(keyword in col.lower() 
-                  for keyword in ['code', 'cd', 'type', 'date'])
+                  for keyword in ['id', 'code', 'cd'])
         ]
-        # 如果没有找到任何符合条件的列，则使用前3列作为默认值
-        if not target_cols and len(columns) >= 3:
+        
+        # 如果找不到优先列，选择前2-3列
+        if priority_cols:
+            target_cols = priority_cols[:3]  # 最多取3列
+        elif len(columns) >= 3:
             target_cols = columns[:3]
-        elif not target_cols:
+        elif len(columns) == 2:
+            target_cols = columns[:2]
+        else:
             target_cols = columns.copy()
     
-    # 处理数据行：使用正则表达式处理空格分隔的数据
+    # 处理数据行 - 使用空格分割并保留所有字段
     data_rows = []
     for line in lines[1:]:
         if not line.strip():
             continue
             
-        # 使用正则表达式分割多个连续空格（保留空字段）
-        row_data = [cell.strip() for cell in re.split(r'\s{2,}', line)]
+        # 使用空格分割行数据
+        row_data = re.split(r'\s+', line)
         
-        # 确保行数据长度与列数匹配
+        # 补齐缺失列
         if len(row_data) < len(columns):
             row_data.extend([''] * (len(columns) - len(row_data)))
         elif len(row_data) > len(columns):
             row_data = row_data[:len(columns)]
             
-        data_rows.append(row_data)
+        data_rows.append([cell.strip() for cell in row_data])
     
     # 验证目标列是否存在
     for col in target_cols:
@@ -59,34 +66,18 @@ def generate_sorted_sql_query(table_name, input_text, target_cols=None):
     # 获取目标列的索引
     col_indices = [columns.index(col) for col in target_cols]
     
-    # 收集唯一组合值并按照目标列排序
-    unique_combinations = []
+    # 收集所有行数据（不去重）
+    all_values = []
     for row in data_rows:
         combination = tuple(row[i] for i in col_indices)
-        
-        # 创建排序键：尝试数值转换，失败则使用原始值
-        sort_keys = []
-        for value in combination:
-            try:
-                sort_keys.append(int(value))
-            except ValueError:
-                try:
-                    sort_keys.append(float(value))
-                except ValueError:
-                    sort_keys.append(value)
-        
-        unique_combinations.append((tuple(sort_keys), combination))
-    
-    # 去重并排序
-    sorted_combinations = sorted(set(unique_combinations), key=lambda x: x[0])
-    sorted_values = [item[1] for item in sorted_combinations]
+        all_values.append(combination)
     
     # 格式化SELECT子句 - 每列单独一行
     select_clause = ",\n    ".join(columns)
     
     # 格式化WHERE子句 - 每行一个元组值（空值转换为NULL）
     where_values = []
-    for tup in sorted_values:
+    for tup in all_values:
         quoted_values = []
         for value in tup:
             # 空值转换为SQL的NULL
@@ -106,22 +97,25 @@ WHERE ({', '.join(target_cols)}) IN (
     
     return sql
 
+
+
+
 # 示例使用
 # if __name__ == "__main__":
 input_text = """
-DELETE_FLAG EMPLR_ACCT_CD STATUS_CD ORIG_EMPLR_CD
-N 6600449990 ACTIVE 
-N 6600449991 ACTIVE 
-N 6600449992 ACTIVE 
-N 6600449993 ACTIVE 
-N 6600449994 ACTIVE 315968
-N 6600449995 ACTIVE 321424
-N 6600449996 ACTIVE 327393
-Y 6600449997 ACTIVE 
-N 6600449998 ACTIVE 
-N 6600449999 ACTIVE 
-N 6600450000 ACTIVE 
-N 6600450001 ACTIVE 
+DELETE_FLAG	EMPLR_ACCT_CD	STATUS_CD	ORIG_EMPLR_CD
+N	6600449990	ACTIVE	 
+N	6600449991	ACTIVE	 
+N	6600449992	ACTIVE	 
+N	6600449993	ACTIVE	 
+N	6600449994	ACTIVE	315968
+N	6600449995	ACTIVE	321424
+N	6600449996	ACTIVE	327393
+Y	6600449997	ACTIVE	 
+N	6600449998	ACTIVE	 
+N	6600449999	ACTIVE	 
+N	6600450000	ACTIVE	 
+N	6600450001	ACTIVE 	  
 """
 
 table_name = "tb_employer_account"
