@@ -1,44 +1,61 @@
 import pandas as pd
 from io import StringIO
 
-def generate_sql_queries_from_text(raw_text: str, table_name: str, use_star=True) -> list:
+def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
     """
-    从 Excel 粘贴的文本中生成 SQL 查询语句，支持 employer_account_code 和 member_account_code。
-    自动处理数值型 ID 去除小数点后的 .0。
+    从 Excel 粘贴的文本中提取 employer_account_code 和 member_account_code，
+    自动去除.0浮点，生成单条SQL语句，使用 IN (...) 一次性查询所有匹配记录。
     """
-
-    # 嵌套的辅助函数：用于格式化 ID，避免出现如 8800000.0
+    # 嵌套函数：格式化 ID，去除浮点型的 .0
     def format_id(value):
         if pd.isna(value):
-            return ""
+            return None
         if isinstance(value, float) and value.is_integer():
             return str(int(value))
         return str(value).strip()
 
-    # 读取 Excel 粘贴的文本内容
+    # 读取 Excel 复制的文本内容
     df = pd.read_csv(StringIO(raw_text), sep='\t')
 
-    sql_list = []
-    all_columns = df.columns.tolist()
-    select_clause = "*" if use_star else ", ".join(all_columns)
+    # 收集两类ID
+    employer_ids = set()
+    member_ids = set()
 
     for _, row in df.iterrows():
-        if pd.notna(row.get("employer_account_code")):
-            value = row["employer_account_code"]
-            where_clause = f"employer_account_code = '{format_id(value)}'"
-        elif pd.notna(row.get("member_account_code")):
-            value = row["member_account_code"]
-            where_clause = f"member_account_code = '{format_id(value)}'"
-        else:
-            continue
+        emp_id = format_id(row.get("employer_account_code"))
+        mem_id = format_id(row.get("member_account_code"))
+        if emp_id:
+            employer_ids.add(emp_id)
+        if mem_id:
+            member_ids.add(mem_id)
 
-        sql = f"SELECT {select_clause} FROM {table_name} WHERE {where_clause};"
-        sql_list.append(sql)
+    # 构造 IN (...) 部分
+    emp_part = ""
+    mem_part = ""
+    
+    if employer_ids:
+        emp_list = "', '".join(sorted(employer_ids))
+        emp_part = f"employer_account_code IN ('{emp_list}')"
+    
+    if member_ids:
+        mem_list = "', '".join(sorted(member_ids))
+        mem_part = f"member_account_code IN ('{mem_list}')"
 
-    return sql_list
+    # 组合 WHERE 条件
+    if emp_part and mem_part:
+        where_clause = f"WHERE {emp_part} OR {mem_part}"
+    elif emp_part:
+        where_clause = f"WHERE {emp_part}"
+    elif mem_part:
+        where_clause = f"WHERE {mem_part}"
+    else:
+        return "-- No valid employer or member account codes found."
 
+    # 返回最终 SQL 查询
+    sql = f"SELECT * FROM {table_name} {where_clause};"
+    return sql
 
-excel_text = """
+raw_text = """
 employer_account_code	member_account_code
 20000100	
 8800000	200100010
@@ -48,7 +65,5 @@ employer_account_code	member_account_code
 8800002	200100012
 """
 
-queries = generate_sql_queries_from_text(excel_text, table_name="ra_rebate_details_account")
-
-for q in queries:
-    print(q)
+sql_query = generate_sql_in_query_from_text(raw_text, "ra_rebate_details_account")
+print(sql_query)
