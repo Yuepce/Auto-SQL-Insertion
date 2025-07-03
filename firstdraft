@@ -55,15 +55,7 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
     sql = f"SELECT * FROM {table_name} {where_clause};"
     return sql
 
-raw_text = """
-employer_account_code	member_account_code
-20000100	
-8800000	200100010
-20000101	
-8800001	200100011
-20000102	
-8800002	200100012
-"""
-
-sql_query = generate_sql_in_query_from_text(raw_text, "ra_rebate_details_account")
-print(sql_query)
+SELECT scheme_code, account_type, employer_account_code, member_account_code, ...
+FROM ra_rebate_details_account
+WHERE employer_account_code IN ('20000100', '20000101', '8800000')
+   OR member_account_code IN ('200100010', '200100011');
