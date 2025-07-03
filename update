@@ -69,3 +69,39 @@ WHERE {where_clause};
 selected_fields = ["emplr_acct_cd", "mbr_acct_cd"]  # 手动指定字段
 sql = generate_sql_query_custom_columns("ra_rebate_details_account", input_text, selected_fields)
 print(sql)
+
+
+
+
+SELECT
+    employer_account_code,
+    member_account_code
+FROM ra_rebate_details_account
+WHERE (employer_account_code, member_account_code) IN (
+    ('20000100', NULL),
+    ('20000101', NULL),
+    ('20000102', NULL),
+    ('20000103', NULL),
+    ('20000104', NULL),
+    (NULL, '200100014'),
+    ('20000105', NULL),
+    (NULL, '200100015'),
+    ('20000106', NULL),
+    (NULL, '200100016'),
+    ('20000107', NULL),
+    (NULL, '200100017'),
+    ('20000108', NULL),
+    (NULL, '200100018'),
+    ('20000109', NULL),
+    (NULL, '200100019'),
+    ('20000110', NULL),
+    (NULL, '200100020'),
+    ('20000111', NULL),
+    (NULL, '200100021'),
+    ('20000112', NULL),
+    (NULL, '200100022'),
+    ('20000113', NULL),
+    (NULL, '200100023'),
+    ('20000114', NULL)
+);
+
