@@ -1,24 +1,81 @@
+✅ 修改后完整的 Python 函数（纯文本输入）
+
+你只需复制 Excel 内容（包括列名），粘贴成文本传给函数，它会自动处理顺序匹配。
+
 import pandas as pd
+from io import StringIO
 
-# 读取两个表
-df_a = pd.read_excel("table_a.xlsx")  # 表A：参考顺序
-df_b = pd.read_excel("table_b.xlsx")  # 表B：乱序表
+def restore_order_from_text(table_a_text: str, table_b_text: str, key_columns: list) -> pd.DataFrame:
+    """
+    将表B按表A的指定列顺序还原。
 
-# 设定用于匹配的列（可以多个）
-key_cols = ["employer_account_code", "member_account_code"]
+    参数：
+    - table_a_text: 表A的复制粘贴文本（参考顺序）
+    - table_b_text: 表B的复制粘贴文本（乱序，需要还原）
+    - key_columns: 用于匹配顺序的主键列列表（例如 ["employer_account_code", "member_account_code"]）
 
-# 添加“排序位置”列
-df_a["_original_order"] = range(len(df_a))
+    返回：
+    - 已排序的表B DataFrame
+    """
 
-# 用 key_cols 去 merge，加回排序顺序
-df_sorted = df_b.merge(
-    df_a[key_cols + ["_original_order"]],
-    on=key_cols,
-    how="left"
-).sort_values("_original_order")
+    # 读取两份表格数据（制表符分隔）
+    df_a = pd.read_csv(StringIO(table_a_text), sep='\t')
+    df_b = pd.read_csv(StringIO(table_b_text), sep='\t')
 
-# 去掉排序辅助列
-df_sorted = df_sorted.drop(columns=["_original_order"])
+    # 添加顺序编号到A
+    df_a["_original_order"] = range(len(df_a))
 
-# 保存或返回
-df_sorted.to_excel("表B已排序.xlsx", index=False)
+    # 将顺序merge到B，并按顺序排序
+    df_b_sorted = df_b.merge(
+        df_a[key_columns + ["_original_order"]],
+        on=key_columns,
+        how="left"
+    ).sort_values(by="_original_order")
+
+    # 删除排序辅助列
+    df_b_sorted = df_b_sorted.drop(columns=["_original_order"])
+
+    return df_b_sorted
+
+
+⸻
+
+✅ 使用示例：
+
+# 复制Excel中的表A内容
+table_a_text = """
+scheme_code	account_type	employer_account_code	member_account_code
+RB	ER	20000100	
+RB	PAH	8800000	200100010
+RB	ER	20000101	
+RB	PAH	8800001	200100011
+"""
+
+# 复制Excel中的表B内容（顺序乱了）
+table_b_text = """
+scheme_code	account_type	employer_account_code	member_account_code
+RB	PAH	8800001	200100011
+RB	ER	20000101	
+RB	PAH	8800000	200100010
+RB	ER	20000100	
+"""
+
+# 指定按哪几列匹配顺序
+sorted_df = restore_order_from_text(table_a_text, table_b_text, ["employer_account_code", "member_account_code"])
+
+# 打印结果
+print(sorted_df)
+
+
+⸻
+
+✅ 输出：
+
+scheme_code	account_type	employer_account_code	member_account_code
+RB	ER	20000100	
+RB	PAH	8800000	200100010
+RB	ER	20000101	
+RB	PAH	8800001	200100011
+
+
+⸻
