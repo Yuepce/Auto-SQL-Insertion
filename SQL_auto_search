@@ -1,106 +1,60 @@
-帮我修改以下代码，使得符合预期的输出内容：
+import csv
+from io import StringIO
 
-import re
-
-def generate_sorted_sql_query(table_name, input_text, target_cols=None):
-    """
-    根据输入的表内容生成格式化的SQL查询，WHERE条件按目标列排序
+def generate_sql_search(table_name, input_text):
+    # 替换多空格为 \t 以兼容 Excel 粘贴（有时会变成空格间隔）
+    input_text = input_text.strip().replace('\xa0', ' ')  # 去除粘贴中的非断行空格
+    input_text = '\n'.join([
+        re.sub(r' {2,}', '\t', line.strip())  # 多空格视作列间距，替换为 \t
+        for line in input_text.strip().splitlines()
+    ])
     
-    参数:
-    table_name (str): 数据库表名
-    input_text (str): 表内容文本
-    target_cols (list/None): 可选，用于WHERE条件的目标列名列表。如果为None则自动选择包含特定关键词的列
+    reader = csv.reader(StringIO(input_text), delimiter='\t')
+    rows = list(reader)
     
-    返回:
-    str: 格式化的SQL查询语句
-    """
-    # 分割文本行并移除空行
-    lines = [line.strip() for line in input_text.split('\n') if line.strip()]
-    
-    if not lines:
+    if not rows:
         return f"SELECT * FROM {table_name} /* No data provided */"
-    
-    # 提取列名 - 使用正则匹配任意空格分隔
-    columns = re.split(r'\s+', lines[0])
-    columns = [col.strip() for col in columns if col.strip()]
-    
-    # 自动识别目标列（如果未提供） - 简化选择逻辑
-    if target_cols is None:
-        # 优先选择包含关键字的列
-        priority_cols = [
-            col for col in columns 
-            if any(keyword in col.lower() 
-                  for keyword in ['id', 'code', 'cd'])
-        ]
-        
-        # 如果找不到优先列，选择前2-3列
-        if priority_cols:
-            target_cols = priority_cols[:3]  # 最多取3列
-        elif len(columns) >= 3:
-            target_cols = columns[:3]
-        elif len(columns) == 2:
-            target_cols = columns[:2]
-        else:
-            target_cols = columns.copy()
-    
-    # 处理数据行 - 使用空格分割并保留所有字段
-    data_rows = []
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-            
-        # 使用空格分割行数据
-        row_data = re.split(r'\s+', line)
-        
-        # 补齐缺失列
-        if len(row_data) < len(columns):
-            row_data.extend([''] * (len(columns) - len(row_data)))
-        elif len(row_data) > len(columns):
-            row_data = row_data[:len(columns)]
-            
-        data_rows.append([cell.strip() for cell in row_data])
-    
-    # 验证目标列是否存在
-    for col in target_cols:
-        if col not in columns:
-            raise ValueError(f"目标列 '{col}' 不在表列中")
-    
-    # 获取目标列的索引
-    col_indices = [columns.index(col) for col in target_cols]
-    
-    # 收集所有行数据（不去重）
-    all_values = []
+
+    # 提取列名
+    columns = [col.strip() for col in rows[0]]
+    data_rows = rows[1:]
+
+    # 准备有效数据（过滤掉整行空值）
+    clean_data_rows = []
     for row in data_rows:
-        combination = tuple(row[i] for i in col_indices)
-        all_values.append(combination)
-    
-    # 格式化SELECT子句 - 每列单独一行
-    select_clause = ",\n    ".join(columns)
-    
-    # 格式化WHERE子句 - 每行一个元组值（空值转换为NULL）
+        # 补齐或截断字段数
+        if len(row) < len(columns):
+            row += [''] * (len(columns) - len(row))
+        elif len(row) > len(columns):
+            row = row[:len(columns)]
+        
+        # 跳过整行空的记录
+        if all(cell.strip() == '' for cell in row):
+            continue
+        
+        clean_data_rows.append([cell.strip() for cell in row])
+
+    # 构造 WHERE 子句内容
     where_values = []
-    for tup in all_values:
-        quoted_values = []
-        for value in tup:
-            # 空值转换为SQL的NULL
-            if value == '':
-                quoted_values.append('NULL')
-            else:
-                quoted_values.append(f"'{value}'")
-        where_values.append(f"    ({', '.join(quoted_values)})")
-    
-    # 构建格式化的SQL查询
+    for row in clean_data_rows:
+        formatted = [
+            'NULL' if cell == '' else f"'{cell}'"
+            for cell in row
+        ]
+        where_values.append(f"    ({', '.join(formatted)})")
+
+    # 拼接 SQL 语句
+    select_clause = ",\n    ".join(columns)
+    where_clause = f"({', '.join(columns)}) IN (\n{',\n'.join(where_values)}\n)"
+
     sql = f"""SELECT
     {select_clause}
 FROM {table_name}
-WHERE ({', '.join(target_cols)}) IN (
-{',\n'.join(where_values)}
-);"""
-    
+WHERE {where_clause};
+"""
     return sql
 
 
-当我输入以下内容的时候：
 # 示例使用
 # if __name__ == "__main__":
 input_text = """
@@ -117,70 +71,8 @@ RB	ER	20000103		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	N
 																
 RB	ER	20000104		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
 RB	PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-RB	ER	20000105		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-RB	PAH		200100015	N	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
 """
 
 table_name = "ra_rebate_details_account"
-sql_query = generate_sorted_sql_query(table_name, input_text)
+sql_query = generate_sql_search(table_name, input_text)
 print(sql_query)
-
-输出为：
-SELECT
-    scheme_code,
-    account_type,
-    employer_account_code,
-    member_account_code,
-    regular_rebate_applicable,
-    annual_rebate_applicable,
-    regular_rebate_distribution_subacct,
-    regular_rebate_distribution_fund,
-    regular_rebate_calculation_option,
-    regular_rebate_allow_rollover,
-    annual_rebate_allow_rollover,
-    source_employer_code,
-    record_creation_datetime,
-    record_created_by,
-    record_last_update_datetime,
-    record_last_updated_by,
-    delete_flag
-FROM ra_rebate_details_account
-WHERE (scheme_code, employer_account_code, member_account_code) IN (
-    ('RB', '20000100', 'Y'),
-    ('RB', '20000101', 'N'),
-    ('RB', '20000102', 'Y'),
-    ('RB', '20000103', 'Y'),
-    ('RB', '20000104', 'Y'),
-    ('RB', '200100014', 'Y'),
-    ('RB', '20000105', 'Y'),
-    ('RB', '200100015', 'N')
-);
-
-但理应输出:
-SELECT
-    scheme_code,
-    account_type,
-    employer_account_code,
-    member_account_code,
-    regular_rebate_applicable,
-    annual_rebate_applicable,
-    regular_rebate_distribution_subacct,
-    regular_rebate_distribution_fund,
-    regular_rebate_calculation_option,
-    regular_rebate_allow_rollover,
-    annual_rebate_allow_rollover,
-    source_employer_code,
-    record_creation_datetime,
-    record_created_by,
-    record_last_update_datetime,
-    record_last_updated_by,
-    delete_flag
-FROM ra_rebate_details_account
-WHERE (scheme_code, employer_account_code, member_account_code) IN (
-    ('RB', '20000100', NULL),
-    ('RB', '20000101', NULL),
-    ('RB', '20000102', NULL),
-    ('RB', '20000103', NULL),
-    ('RB', '20000104', '200100014'),
-    ('RB', '20000105', '200100015')
-);
