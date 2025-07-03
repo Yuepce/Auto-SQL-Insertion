@@ -112,3 +112,140 @@ Sub HighlightTableDifferences()
 
     MsgBox "Difference highlighting completed!", vbInformation
 End Sub
+
+
+
+update: 
+
+明白了。你希望我写一个 Python 脚本，它可以自动生成 VBA 代码，并允许你自定义：
+	•	tableA_range（如 "A2:Z100"）
+	•	tableB_range（如 "A102:Z200"）
+	•	highlight_color_name（如 "red"）
+	•	use_key_columns（True/False）
+	•	key_columns（如 ["A", "C"]）
+
+⸻
+
+✅ 下面是完整的 Python 脚本：生成对应的 VBA 代码
+
+def generate_vba_diff_highlighter(
+    table_a_range: str,
+    table_b_range: str,
+    highlight_color_name: str = "red",
+    use_key_columns: bool = False,
+    key_columns: list = None
+):
+    """
+    Generate VBA script to compare two Excel tables and highlight differences in Table B.
+    """
+
+    # Define RGB mapping
+    color_map = {
+        "red": "RGB(255, 0, 0)",
+        "yellow": "RGB(255, 255, 0)",
+        "green": "RGB(0, 255, 0)",
+        "blue": "RGB(0, 0, 255)",
+        "orange": "RGB(255, 165, 0)"
+    }
+
+    rgb_color = color_map.get(highlight_color_name.lower())
+    if not rgb_color:
+        raise ValueError(f"Unsupported highlight color: {highlight_color_name}")
+
+    # VBA header
+    vba = f"""Sub CompareAndHighlightDiffs()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+
+    Dim tableA As Range, tableB As Range
+    Set tableA = ws.Range("{table_a_range}")
+    Set tableB = ws.Range("{table_b_range}")
+
+    Dim r As Long, c As Long
+    tableB.Interior.Pattern = xlNone
+"""
+
+    # Optional sorting by key columns
+    if use_key_columns:
+        if not key_columns:
+            raise ValueError("Key columns must be specified if use_key_columns=True")
+        sort_code = ""
+        for col in reversed(key_columns):
+            sort_code += f"""    tableB.Sort Key1:=tableB.Columns(ws.Range("{col}1").Column), Order1:=xlAscending, Header:=xlNo
+"""
+        vba += "\n    ' --- Sort tableB by key columns ---\n" + sort_code
+
+    # Comparison + highlight
+    vba += f"""
+    If tableA.Rows.Count <> tableB.Rows.Count Or tableA.Columns.Count <> tableB.Columns.Count Then
+        MsgBox "Table A and B have different dimensions!", vbExclamation
+        Exit Sub
+    End If
+
+    For r = 1 To tableA.Rows.Count
+        For c = 1 To tableA.Columns.Count
+            If tableA.Cells(r, c).Value <> tableB.Cells(r, c).Value Then
+                tableB.Cells(r, c).Interior.Color = {rgb_color}
+            End If
+        Next c
+    Next r
+
+    MsgBox "✅ Comparison complete. Differences highlighted.", vbInformation
+End Sub
+"""
+
+    return vba
+
+
+⸻
+
+✅ 使用示例（生成一段VBA代码）
+
+vba_code = generate_vba_diff_highlighter(
+    table_a_range="A2:Z100",
+    table_b_range="A102:Z200",
+    highlight_color_name="blue",
+    use_key_columns=True,
+    key_columns=["A", "C"]
+)
+
+print(vba_code)
+
+
+⸻
+
+✅ 输出示意（你会得到这样的VBA代码）
+
+Sub CompareAndHighlightDiffs()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+
+    Dim tableA As Range, tableB As Range
+    Set tableA = ws.Range("A2:Z100")
+    Set tableB = ws.Range("A102:Z200")
+
+    Dim r As Long, c As Long
+    tableB.Interior.Pattern = xlNone
+
+    ' --- Sort tableB by key columns ---
+    tableB.Sort Key1:=tableB.Columns(ws.Range("C1").Column), Order1:=xlAscending, Header:=xlNo
+    tableB.Sort Key1:=tableB.Columns(ws.Range("A1").Column), Order1:=xlAscending, Header:=xlNo
+
+    If tableA.Rows.Count <> tableB.Rows.Count Or tableA.Columns.Count <> tableB.Columns.Count Then
+        MsgBox "Table A and B have different dimensions!", vbExclamation
+        Exit Sub
+    End If
+
+    For r = 1 To tableA.Rows.Count
+        For c = 1 To tableA.Columns.Count
+            If tableA.Cells(r, c).Value <> tableB.Cells(r, c).Value Then
+                tableB.Cells(r, c).Interior.Color = RGB(0, 0, 255)
+            End If
+        Next c
+    Next r
+
+    MsgBox "✅ Comparison complete. Differences highlighted.", vbInformation
+End Sub
+
+
+⸻
