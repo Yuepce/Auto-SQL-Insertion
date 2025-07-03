@@ -1,34 +1,13 @@
-下面是你请求的 ✅ 改写版本，它能自动将含 NULL 的条件从 IN (...) 中拆分成 IS NULL 或 = 'xxx' 的 OR 条件表达式，从而确保 PGAdmin 可正确匹配到结果。
-
-⸻
-
-✅ 改写重点：
-
-原功能	修改后行为
-WHERE (...) IN ((..., NULL))	❌ 不再使用，会匹配不到
-改为：多行 OR (...) 形式	✅ 自动判断值是 NULL 还是非空，生成如：(col1 = 'xxx' AND col2 IS NULL)
-
-
-⸻
-
-✅ 修改后完整代码如下：
-
 import csv
 import re
 from io import StringIO
 
-def generate_sql_with_explicit_nulls(table_name, input_text, where_cols):
+def generate_sql_with_explicit_nulls_fixed(table_name, input_text, where_cols):
     """
-    构建 SQL：SELECT 所有字段；WHERE 仅使用指定列，并自动将 NULL 拆为 IS NULL。
-
-    参数:
-    - table_name (str): SQL 表名
-    - input_text (str): 粘贴数据（含列头）
-    - where_cols (list[str]): 用于 WHERE 的列名
-
-    返回:
-    - str: 完整 SQL 查询语句
+    构建 SQL：SELECT 所有字段；WHERE 使用手动指定字段并处理 NULL，防止错位。
     """
+
+    # Step 1: 替换多空格为 \t（适配 Excel 粘贴）
     input_text = input_text.strip().replace('\xa0', ' ')
     input_text = '\n'.join([
         re.sub(r' {2,}', '\t', line.strip())
@@ -40,45 +19,43 @@ def generate_sql_with_explicit_nulls(table_name, input_text, where_cols):
     if not rows:
         return "-- No data provided"
 
+    # Step 2: 获取字段名
     all_columns = [col.strip() for col in rows[0]]
     data_rows = rows[1:]
 
-    # 校验列存在性
-    missing = [col for col in where_cols if col not in all_columns]
-    if missing:
-        return f"-- Error: These WHERE columns are missing from data: {missing}"
+    # Step 3: 验证 WHERE 列名存在性
+    missing_cols = [col for col in where_cols if col not in all_columns]
+    if missing_cols:
+        return f"-- Error: These WHERE columns are missing from header: {missing_cols}"
 
     where_indices = [all_columns.index(col) for col in where_cols]
 
-    # 清洗有效行
+    # Step 4: 处理数据行（保留字段数量一致，确保列不乱）
     valid_rows = []
     for row in data_rows:
+        row = [cell.strip() for cell in row]
+        # 补齐或截断字段数
         if len(row) < len(all_columns):
             row += [''] * (len(all_columns) - len(row))
-        row = row[:len(all_columns)]
-        if all(cell.strip() == '' for cell in row):
+        else:
+            row = row[:len(all_columns)]
+        # 跳过整行空值
+        if all(cell == '' for cell in row):
             continue
-        valid_rows.append([cell.strip() for cell in row])
+        valid_rows.append(row)
 
-    # 构造 WHERE 条件（每行转成一个 AND 表达式）
+    # Step 5: 构建 WHERE 条件（每行一个 AND 表达式，支持 IS NULL）
     where_clauses = []
     for row in valid_rows:
         clause_parts = []
         for idx, col in zip(where_indices, where_cols):
-            val = row[idx].strip()
-            if val == '':
-                clause_parts.append(f"{col} IS NULL")
-            else:
-                clause_parts.append(f"{col} = '{val}'")
+            val = row[idx]
+            clause_parts.append(f"{col} IS NULL" if val == '' else f"{col} = '{val}'")
         where_clauses.append("    (" + " AND ".join(clause_parts) + ")")
 
-    # 构建最终 SQL
+    # Step 6: 拼接 SQL
     select_clause = ",\n    ".join(all_columns)
-    if where_clauses:
-        where_block = "\nOR\n".join(where_clauses)
-        where_clause = f"(\n{where_block}\n)"
-    else:
-        where_clause = "1 = 0  -- no valid conditions"
+    where_clause = "(\n" + "\nOR\n".join(where_clauses) + "\n)" if where_clauses else "1 = 0 -- no valid WHERE clause"
 
     sql = f"""SELECT
     {select_clause}
@@ -88,33 +65,9 @@ WHERE {where_clause};
     return sql
 
 
-⸻
-
-✅ 示例调用：
-
-sql = generate_sql_with_explicit_nulls(
-    "ra_rebate_details_account",
+sql = generate_sql_with_explicit_nulls_fixed(
+    "ra_rebate_details_funds",
     input_text,
-    where_cols=["emplr_acct_cd", "mbr_acct_cd"]
+    where_cols=["employer_account_code", "member_account_code"]
 )
 print(sql)
-
-
-⸻
-
-✅ 示例输出 SQL：
-
-SELECT
-    emplr_acct_cd,
-    mbr_acct_cd,
-    ...
-FROM ra_rebate_details_account
-WHERE (
-    (emplr_acct_cd = '20000100' AND mbr_acct_cd IS NULL)
-OR  (emplr_acct_cd IS NULL AND mbr_acct_cd = '200100014')
-OR  (emplr_acct_cd = '20000105' AND mbr_acct_cd IS NULL)
-);
-
-
-⸻
-
