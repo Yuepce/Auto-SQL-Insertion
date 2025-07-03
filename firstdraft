@@ -1,61 +1,56 @@
-明白了 ✅
+下面是你请求的 ✅ 改写版本，它能自动将含 NULL 的条件从 IN (...) 中拆分成 IS NULL 或 = 'xxx' 的 OR 条件表达式，从而确保 PGAdmin 可正确匹配到结果。
 
 ⸻
 
-✅ 你的新需求总结如下：
+✅ 改写重点：
 
-项目	说明
-SELECT 子句	保留输入数据中的所有字段 ✅
-WHERE 子句	只使用手动指定的字段构建 (col1, col2, ...) IN (...) ✅
-自动跳过 NULL	如果某一行在 WHERE 列中有任意 NULL，则整行 不包含在 WHERE 子句中 ✅
-整行空值跳过	自动忽略全空的行 ✅
-支持 Excel 粘贴	自动将多空格转换为制表符 \t ✅
+原功能	修改后行为
+WHERE (...) IN ((..., NULL))	❌ 不再使用，会匹配不到
+改为：多行 OR (...) 形式	✅ 自动判断值是 NULL 还是非空，生成如：(col1 = 'xxx' AND col2 IS NULL)
 
 
 ⸻
 
-✅ 最终代码如下：
+✅ 修改后完整代码如下：
 
 import csv
 import re
 from io import StringIO
 
-def generate_sql_with_partial_where(table_name, input_text, where_cols):
+def generate_sql_with_explicit_nulls(table_name, input_text, where_cols):
     """
-    构建 SQL：SELECT 所有字段，WHERE 仅使用指定列，且过滤掉包含 NULL 的 WHERE 元组。
+    构建 SQL：SELECT 所有字段；WHERE 仅使用指定列，并自动将 NULL 拆为 IS NULL。
 
     参数:
     - table_name (str): SQL 表名
-    - input_text (str): Excel 粘贴数据（含列头）
-    - where_cols (list[str]): 手动指定用于 WHERE 的列名（必须在列中）
+    - input_text (str): 粘贴数据（含列头）
+    - where_cols (list[str]): 用于 WHERE 的列名
 
     返回:
-    - str: 格式化后的 SQL 查询语句
+    - str: 完整 SQL 查询语句
     """
-    # 清洗格式
     input_text = input_text.strip().replace('\xa0', ' ')
     input_text = '\n'.join([
         re.sub(r' {2,}', '\t', line.strip())
         for line in input_text.strip().splitlines()
     ])
-    
+
     reader = csv.reader(StringIO(input_text), delimiter='\t')
     rows = list(reader)
     if not rows:
         return "-- No data provided"
 
-    # 获取全部列名
     all_columns = [col.strip() for col in rows[0]]
     data_rows = rows[1:]
 
-    # 验证 WHERE 字段是否存在
+    # 校验列存在性
     missing = [col for col in where_cols if col not in all_columns]
     if missing:
         return f"-- Error: These WHERE columns are missing from data: {missing}"
 
     where_indices = [all_columns.index(col) for col in where_cols]
 
-    # 净化数据：跳过空行，补齐字段
+    # 清洗有效行
     valid_rows = []
     for row in data_rows:
         if len(row) < len(all_columns):
@@ -65,42 +60,39 @@ def generate_sql_with_partial_where(table_name, input_text, where_cols):
             continue
         valid_rows.append([cell.strip() for cell in row])
 
-    # 构造 WHERE 元组（跳过任何包含 NULL 的元组）
-    where_values = []
+    # 构造 WHERE 条件（每行转成一个 AND 表达式）
+    where_clauses = []
     for row in valid_rows:
-        values = []
-        null_found = False
-        for idx in where_indices:
-            val = row[idx]
+        clause_parts = []
+        for idx, col in zip(where_indices, where_cols):
+            val = row[idx].strip()
             if val == '':
-                null_found = True
-                break
-            values.append(f"'{val}'")
-        if not null_found:
-            where_values.append(f"    ({', '.join(values)})")
+                clause_parts.append(f"{col} IS NULL")
+            else:
+                clause_parts.append(f"{col} = '{val}'")
+        where_clauses.append("    (" + " AND ".join(clause_parts) + ")")
 
-    # 输出所有列作为 SELECT
+    # 构建最终 SQL
     select_clause = ",\n    ".join(all_columns)
-    where_clause = f"({', '.join(where_cols)}) IN (\n{',\n'.join(where_values)}\n)" if where_values else "-- WHERE skipped due to all NULLs"
+    if where_clauses:
+        where_block = "\nOR\n".join(where_clauses)
+        where_clause = f"(\n{where_block}\n)"
+    else:
+        where_clause = "1 = 0  -- no valid conditions"
 
-    # 拼接 SQL
     sql = f"""SELECT
     {select_clause}
 FROM {table_name}
 WHERE {where_clause};
-""" if where_values else f"""SELECT
-    {select_clause}
-FROM {table_name};
-/* All rows skipped due to NULLs in WHERE columns */"""
-
+"""
     return sql
 
 
 ⸻
 
-✅ 示例调用方式：
+✅ 示例调用：
 
-sql = generate_sql_with_partial_where(
+sql = generate_sql_with_explicit_nulls(
     "ra_rebate_details_account",
     input_text,
     where_cols=["emplr_acct_cd", "mbr_acct_cd"]
@@ -110,28 +102,20 @@ print(sql)
 
 ⸻
 
-✅ 示例输出（只包含 WHERE 中无 NULL 的行）：
+✅ 示例输出 SQL：
 
 SELECT
-    scheme_code,
-    account_type,
     emplr_acct_cd,
     mbr_acct_cd,
     ...
 FROM ra_rebate_details_account
-WHERE (emplr_acct_cd, mbr_acct_cd) IN (
-    ('20000104', '200100014'),
-    ('20000105', '200100015')
+WHERE (
+    (emplr_acct_cd = '20000100' AND mbr_acct_cd IS NULL)
+OR  (emplr_acct_cd IS NULL AND mbr_acct_cd = '200100014')
+OR  (emplr_acct_cd = '20000105' AND mbr_acct_cd IS NULL)
 );
-
-如果所有行都因 NULL 被过滤，则自动生成：
-
-SELECT
-    ...
-FROM ra_rebate_details_account;
-/* All rows skipped due to NULLs in WHERE columns */
 
 
 ⸻
 
-是否还希望加入 DISTINCT、输出 .sql 文件、或导出符合 WHERE 的原始数据行？我可以继续为你扩展。
+这样生成的 SQL 能完美适配 PostgreSQL 查询语义 ✅。如果你希望我扩展支持 DISTINCT 或 LIMIT，也可以继续增强。需要吗？
