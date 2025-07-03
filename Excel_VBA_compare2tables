@@ -75,3 +75,41 @@ vba_script = generate_vba_diff_highlighter(
     key_columns=['A', 'I', 'D']  # employer_account_code, fund_code, and department_code
 )
 print(vba_script)
+
+
+
+你现在的目标是：
+
+✅ 对比两个 Excel 表格（结构相同，行列完全一致），逐格比较内容，将 表B中与表A不同的单元格用红色高亮显示。
+❌ 不再使用 key columns，也不再进行匹配，只是 纯位置对应的比较（按 row/col 对齐）。
+
+Sub HighlightTableDifferences()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+
+    ' 设置两个表的范围（根据你的实际数据调整）
+    Dim rngA As Range, rngB As Range
+    Set rngA = ws.Range("A2:Z100")   ' 表A的范围
+    Set rngB = ws.Range("A102:Z200") ' 表B的范围
+
+    ' 清除表B的旧高亮
+    rngB.Interior.Pattern = xlNone
+
+    ' 检查尺寸是否一致
+    If rngA.Rows.Count <> rngB.Rows.Count Or rngA.Columns.Count <> rngB.Columns.Count Then
+        MsgBox "两个表格的尺寸不一致，无法逐格比较", vbExclamation
+        Exit Sub
+    End If
+
+    ' 逐格比较并高亮不同
+    Dim r As Long, c As Long
+    For r = 1 To rngA.Rows.Count
+        For c = 1 To rngA.Columns.Count
+            If rngA.Cells(r, c).Value <> rngB.Cells(r, c).Value Then
+                rngB.Cells(r, c).Interior.Color = RGB(255, 0, 0)  ' 红色高亮
+            End If
+        Next c
+    Next r
+
+    MsgBox "✅ 差异高亮完成！", vbInformation
+End Sub
