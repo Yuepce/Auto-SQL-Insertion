@@ -5,8 +5,10 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
     """
     从 Excel 粘贴的文本中提取 employer_account_code 和 member_account_code，
     自动去除.0浮点，生成单条SQL语句，使用 IN (...) 一次性查询所有匹配记录。
+    SELECT 后将包含输入数据的所有列名，而不是 *。
     """
-    # 嵌套函数：格式化 ID，去除浮点型的 .0
+
+    # 内部函数：格式化ID，移除 .0
     def format_id(value):
         if pd.isna(value):
             return None
@@ -14,10 +16,14 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
             return str(int(value))
         return str(value).strip()
 
-    # 读取 Excel 复制的文本内容
+    # 解析 DataFrame
     df = pd.read_csv(StringIO(raw_text), sep='\t')
 
-    # 收集两类ID
+    # 构建 SELECT 子句：用所有列名代替 *
+    column_list = df.columns.tolist()
+    select_clause = ", ".join([f"{col}" for col in column_list])
+
+    # 收集 IN 查询所需的 employer 和 member ID
     employer_ids = set()
     member_ids = set()
 
@@ -29,19 +35,17 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
         if mem_id:
             member_ids.add(mem_id)
 
-    # 构造 IN (...) 部分
+    # 构造 WHERE 子句
     emp_part = ""
     mem_part = ""
-    
-    if employer_ids:
-        emp_list = "', '".join(sorted(employer_ids))
-        emp_part = f"employer_account_code IN ('{emp_list}')"
-    
-    if member_ids:
-        mem_list = "', '".join(sorted(member_ids))
-        mem_part = f"member_account_code IN ('{mem_list}')"
 
-    # 组合 WHERE 条件
+    if employer_ids:
+        emp_values = "', '".join(sorted(employer_ids))
+        emp_part = f"employer_account_code IN ('{emp_values}')"
+    if member_ids:
+        mem_values = "', '".join(sorted(member_ids))
+        mem_part = f"member_account_code IN ('{mem_values}')"
+
     if emp_part and mem_part:
         where_clause = f"WHERE {emp_part} OR {mem_part}"
     elif emp_part:
@@ -51,11 +55,7 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
     else:
         return "-- No valid employer or member account codes found."
 
-    # 返回最终 SQL 查询
-    sql = f"SELECT * FROM {table_name} {where_clause};"
+    # 拼接完整 SQL 查询
+    sql = f"SELECT {select_clause} FROM {table_name} {where_clause};"
     return sql
 
-SELECT scheme_code, account_type, employer_account_code, member_account_code, ...
-FROM ra_rebate_details_account
-WHERE employer_account_code IN ('20000100', '20000101', '8800000')
-   OR member_account_code IN ('200100010', '200100011');
