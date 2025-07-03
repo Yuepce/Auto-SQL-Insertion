@@ -1,52 +1,45 @@
-def generate_sql_strict_by_column_position(table_name, input_text, where_cols):
-    import re
+import pandas as pd
 
-    # Step 1: 预处理：分行并清洗（支持粘贴空格或tab）
-    lines = [re.sub(r'\s+', '\t', line.strip()) for line in input_text.strip().splitlines() if line.strip()]
+def generate_sql_queries(df: pd.DataFrame, table_name: str, use_star=True) -> list:
+    """
+    根据输入 DataFrame 自动生成 SQL SELECT 语句列表。
     
-    # Step 2: 拿到列名 & 列数
-    header = lines[0].split('\t')
-    num_cols = len(header)
-    where_indices = [header.index(col) for col in where_cols]
+    参数：
+    - df: 包含employer_account_code和member_account_code等列的数据
+    - table_name: 数据库中对应的表名
+    - use_star: 是否使用 SELECT *（默认True），否则用具体列名
 
-    # Step 3: 处理每一行：即使字段缺失，也补齐为列数
-    rows = []
-    for line in lines[1:]:
-        row = line.split('\t')
-        if all(cell.strip() == '' for cell in row):
-            continue
-        row = [cell.strip() for cell in row]
-        if len(row) < num_cols:
-            row += [''] * (num_cols - len(row))
+    返回：一个SQL查询语句列表，每条语句只需要一个唯一值做WHERE条件
+    """
+    sql_list = []
+
+    # 获取列名列表（供select使用）
+    all_columns = df.columns.tolist()
+    select_clause = "*" if use_star else ", ".join(all_columns)
+
+    for _, row in df.iterrows():
+        # 优先使用非空的唯一字段（以employer优先）
+        if pd.notna(row.get("employer_account_code")):
+            value = row["employer_account_code"]
+            where_clause = f"employer_account_code = '{value}'"
+        elif pd.notna(row.get("member_account_code")):
+            value = row["member_account_code"]
+            where_clause = f"member_account_code = '{value}'"
         else:
-            row = row[:num_cols]
-        rows.append(row)
+            continue  # 跳过全空行
+        
+        sql = f"SELECT {select_clause} FROM {table_name} WHERE {where_clause};"
+        sql_list.append(sql)
 
-    # Step 4: 构造 WHERE 子句
-    conditions = []
-    for row in rows:
-        clause = []
-        for i in where_indices:
-            val = row[i]
-            clause.append(f"{header[i]} IS NULL" if val == '' else f"{header[i]} = '{val}'")
-        conditions.append("    (" + " AND ".join(clause) + ")")
+    return sql_list
 
-    # Step 5: 拼接 SQL
-    select_clause = ",\n    ".join(header)
-    where_clause = "\nOR\n".join(conditions)
 
-    sql = f"""SELECT
-    {select_clause}
-FROM {table_name}
-WHERE (
-{where_clause}
-);
-"""
-    return sql
+# 假设你读取了Excel或CSV：
+df = pd.read_excel("your_file.xlsx")  # 或 pd.read_csv(...)
 
-sql = generate_sql_strict_by_column_position(
-    table_name="ra_rebate_details_funds",
-    input_text=your_input_text,
-    where_cols=["employer_account_code", "member_account_code"]
-)
-print(sql)
+# 生成 SQL 查询语句：
+queries = generate_sql_queries(df, table_name="your_table_name")
+
+# 打印其中几条看看：
+for q in queries[:5]:
+    print(q)
