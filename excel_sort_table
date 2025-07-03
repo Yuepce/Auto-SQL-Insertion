@@ -44,14 +44,104 @@ def restore_order_from_text(table_a_text: str, table_b_text: str, key_columns: l
 
 ✅ 使用时保持输出完整：
 
+# 使用示例：
+
+# 复制Excel中的表A内容
+table_a_text = """
+scheme_code	account_type	employer_account_code	member_account_code	regular_rebate_applicable	annual_rebate_applicable	regular_rebate_distribution_subacct	regular_rebate_distribution_fund	regular_rebate_calculation_option	regular_rebate_allow_rollover	annual_rebate_allow_rollover	source_employer_code	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by	delete_flag
+RB	ER	20000100		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100010	Y	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000101		N	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:01	SYSTEM	2025-01-01 00:00:01	SYSTEM	N
+RB	PAH		200100011	N	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000102		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100012	Y	Y	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000103		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	N		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100013	Y	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000104		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+PB	PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000105		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100015	N	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100015	Y	Y	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000106		N	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100016	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100016	Y	Y	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000107		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100017	Y	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100017	Y	Y	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000108		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100018	Y	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100018	Y	Y	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000109		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100019	Y	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100019	Y	Y	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000110		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100020	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100020	Y	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000111		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100021	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100021	Y	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000112		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100022	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100022	Y	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000113		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100023	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	Y
+RB	PAH		200100023	Y	N	Default Benefits	As per Investment Mandate	NAV				(Triigger time / 1st business day datetime)	(marker)	(Triigger time / 1st business day datetime)	(approver)	N
+RB	ER	20000114		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+
+"""
+
+# 复制Excel中的表B内容（顺序乱了）
+table_b_text = """
+account_type	employer_account_code	member_account_code	regular_rebate_applicable	annual_rebate_applicable	regular_rebate_distribution_subacct	regular_rebate_distribution_fund	regular_rebate_calculation_option	regular_rebate_allow_rollover	annual_rebate_allow_rollover	source_employer_code	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by	delete_flag
+ER	20000100		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000101		N	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000102		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000103		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	N		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000104		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000105		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000106		N	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000107		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000108		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000109		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000110		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000111		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000112		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000113		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+ER	20000114		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		1/1/2025 0:00	SYSTEM	1/1/2025 0:00	SYSTEM	N
+PAH		200100010	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100011	N	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100012	Y	Y	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100013	Y	Y	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100015	N	Y	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100015	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100016	Y	N	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100016	N	Y	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100017	Y	Y	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100017	Y	Y	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100018	Y	Y	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100018	Y	Y	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100019	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100019	Y	Y	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100020	Y	N	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100020	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100021	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100021	Y	N	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100022	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100022	Y	N	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+PAH		200100023	Y	N	Default Benefits	As per Investment Mandate	NAV				7/3/2025 14:08	SYSTEM	7/3/2025 14:08	SYSTEM	N
+PAH		200100023	Y	N	Default Benefits	As per Investment Mandate	NAV				1/1/2025 0:00	SYSTEM	7/3/2025 14:08	SYSTEM	Y
+"""
+
+# 打印完整 DataFrame，不换行、不折断
+sorted_df = restore_order_from_text(table_a_text, table_b_text, ["employer_account_code", "member_account_code"])
+sorted_df 
+
+
 # 打印完整 DataFrame，不换行、不折断
 print(restore_order_from_text(table_a_text, table_b_text, ["employer_account_code", "member_account_code"]))
+sorted_df 
 
-
-⸻
-
-✅ 或者你也可以保存为 Excel：
-
-restore_order_from_text(table_a_text, table_b_text, ["employer_account_code", "member_account_code"]) \
-    .to_excel("restored_output.xlsx", index=False)
 
