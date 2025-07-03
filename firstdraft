@@ -1,57 +1,100 @@
+优化这个功能为一个更灵活、可配置的版本 ✅：
+
+⸻
+
+✅ 功能目标：
+
+功能项	说明
+默认字段识别	自动识别：employer_account_code 或 emplr_acct_cd、member_account_code 或 mbr_acct_cd ✅
+可选追加字段	可通过参数 additional_cols 手动传入额外字段 ✅
+保留字段顺序	自动列排前，手动指定的字段会追加在后 ✅
+空值 → NULL	所有字段中空字符串替换为 NULL ✅
+整行空值跳过	自动跳过无意义行 ✅
+Excel 粘贴支持	自动替换多空格为 tab ✅
+
+
+⸻
+
+✅ 最终代码如下：
+
 import csv
 import re
 from io import StringIO
 
-def generate_filtered_sql_query(table_name, input_text):
-    # 替换多空格为 \t，兼容从 Excel 复制内容
-    input_text = input_text.strip().replace('\xa0', ' ')  # 移除粘贴带入的特殊空格
+def generate_sql_query(table_name, input_text, additional_cols=None):
+    """
+    构建格式化 SQL 查询，仅使用自动识别和指定字段作为 SELECT 和 WHERE 的基础
+    
+    参数:
+    - table_name (str): 数据表名
+    - input_text (str): 从Excel复制粘贴的表格文本
+    - additional_cols (list[str], optional): 附加字段名，用户手动指定额外筛选字段
+    
+    返回:
+    - str: 格式化 SQL 查询语句
+    """
+    # 清洗 Excel 粘贴文本：多空格 → \t
+    input_text = input_text.strip().replace('\xa0', ' ')
     input_text = '\n'.join([
         re.sub(r' {2,}', '\t', line.strip())
         for line in input_text.strip().splitlines()
     ])
-
+    
     reader = csv.reader(StringIO(input_text), delimiter='\t')
     rows = list(reader)
     if not rows:
-        return f"SELECT * FROM {table_name} /* No data provided */"
+        return f"-- No data found in input_text."
 
-    # 所有字段
-    columns = [col.strip() for col in rows[0]]
+    # 原始字段名
+    all_columns = [col.strip() for col in rows[0]]
     data_rows = rows[1:]
 
-    # 自动识别过滤字段（WHERE）
-    filter_keywords = ['code', 'type', 'fund', 'date']
-    where_columns = [
-        col for col in columns
-        if any(key in col.lower() for key in filter_keywords)
-    ]
-    where_indices = [columns.index(col) for col in where_columns]
+    # 自动识别主字段
+    col_map = {
+        'employer': ['employer_account_code', 'emplr_acct_cd'],
+        'member': ['member_account_code', 'mbr_acct_cd']
+    }
+    
+    selected_cols = []
+    for group in col_map.values():
+        for col in group:
+            if col in all_columns:
+                selected_cols.append(col)
+                break
 
-    if not where_columns:
-        return f"-- No matching filter columns found for keywords: {filter_keywords}"
+    # 手动添加额外字段（不重复）
+    if additional_cols:
+        for col in additional_cols:
+            if col in all_columns and col not in selected_cols:
+                selected_cols.append(col)
 
-    # 净化数据，保留有效行
-    clean_data_rows = []
+    if not selected_cols:
+        return "-- No matching columns found for SELECT/WHERE."
+
+    selected_indices = [all_columns.index(col) for col in selected_cols]
+
+    # 清洗有效数据行
+    clean_rows = []
     for row in data_rows:
-        if len(row) < len(columns):
-            row += [''] * (len(columns) - len(row))
-        elif len(row) > len(columns):
-            row = row[:len(columns)]
+        if len(row) < len(all_columns):
+            row += [''] * (len(all_columns) - len(row))
+        row = row[:len(all_columns)]
         if all(cell.strip() == '' for cell in row):
             continue
-        clean_data_rows.append([cell.strip() for cell in row])
+        clean_rows.append([cell.strip() for cell in row])
 
-    # 构造 WHERE 条件
+    # 构建 WHERE 条件行
     where_values = []
-    for row in clean_data_rows:
-        filtered = [
-            'NULL' if row[i] == '' else f"'{row[i]}'"
-            for i in where_indices
+    for row in clean_rows:
+        values = [
+            'NULL' if row[idx] == '' else f"'{row[idx]}'"
+            for idx in selected_indices
         ]
-        where_values.append(f"    ({', '.join(filtered)})")
+        where_values.append(f"    ({', '.join(values)})")
 
-    select_clause = ",\n    ".join(columns)
-    where_clause = f"({', '.join(where_columns)}) IN (\n{',\n'.join(where_values)}\n)"
+    # 构建 SQL
+    select_clause = ",\n    ".join(selected_cols)
+    where_clause = f"({', '.join(selected_cols)}) IN (\n{',\n'.join(where_values)}\n)"
 
     sql = f"""SELECT
     {select_clause}
@@ -61,5 +104,42 @@ WHERE {where_clause};
     return sql
 
 
-table_name = "ra_rebate_details_account"
-print(generate_filtered_sql_query(table_name, input_text))
+⸻
+
+✅ 使用示例 1：只使用默认字段
+
+sql = generate_sql_query("ra_rebate_details_account", input_text)
+print(sql)
+
+输出结果只使用：
+
+SELECT
+    employer_account_code,
+    member_account_code
+...
+
+
+⸻
+
+✅ 使用示例 2：加上 record_creation_datetime、delete_flag
+
+sql = generate_sql_query(
+    "ra_rebate_details_account",
+    input_text,
+    additional_cols=["record_creation_datetime", "delete_flag"]
+)
+print(sql)
+
+输出结果使用：
+
+SELECT
+    employer_account_code,
+    member_account_code,
+    record_creation_datetime,
+    delete_flag
+...
+
+
+⸻
+
+如需固定顺序、输出为 .sql 文件、或集成到批量 Dataiku 项目中，也可以继续扩展。需要我再封装成 CLI 脚本或 notebook cell 吗？
