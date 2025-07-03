@@ -4,11 +4,10 @@ from io import StringIO
 def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
     """
     从 Excel 粘贴的文本中提取 employer_account_code 和 member_account_code，
-    自动去除.0浮点，生成单条SQL语句，使用 IN (...) 一次性查询所有匹配记录。
-    SELECT 后将包含输入数据的所有列名，而不是 *。
+    自动去除.0浮点，生成格式化的单条 SQL 查询，使用 IN (...) 一次性查询所有匹配记录。
+    SELECT 使用输入数据的全量列名，输出语句带 SQL 标准缩进。
     """
 
-    # 内部函数：格式化ID，移除 .0
     def format_id(value):
         if pd.isna(value):
             return None
@@ -16,14 +15,14 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
             return str(int(value))
         return str(value).strip()
 
-    # 解析 DataFrame
+    # 读取复制的 Excel 文本
     df = pd.read_csv(StringIO(raw_text), sep='\t')
 
-    # 构建 SELECT 子句：用所有列名代替 *
+    # 构造 SELECT 字段列表
     column_list = df.columns.tolist()
-    select_clause = ", ".join([f"{col}" for col in column_list])
+    select_clause = ",\n    ".join(column_list)
 
-    # 收集 IN 查询所需的 employer 和 member ID
+    # 收集 ID
     employer_ids = set()
     member_ids = set()
 
@@ -38,16 +37,16 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
     # 构造 WHERE 子句
     emp_part = ""
     mem_part = ""
-
+    
     if employer_ids:
         emp_values = "', '".join(sorted(employer_ids))
-        emp_part = f"employer_account_code IN ('{emp_values}')"
+        emp_part = f"employer_account_code IN (\n        '{emp_values}'\n    )"
     if member_ids:
         mem_values = "', '".join(sorted(member_ids))
-        mem_part = f"member_account_code IN ('{mem_values}')"
+        mem_part = f"member_account_code IN (\n        '{mem_values}'\n    )"
 
     if emp_part and mem_part:
-        where_clause = f"WHERE {emp_part} OR {mem_part}"
+        where_clause = f"WHERE {emp_part}\n    OR {mem_part}"
     elif emp_part:
         where_clause = f"WHERE {emp_part}"
     elif mem_part:
@@ -55,7 +54,10 @@ def generate_sql_in_query_from_text(raw_text: str, table_name: str) -> str:
     else:
         return "-- No valid employer or member account codes found."
 
-    # 拼接完整 SQL 查询
-    sql = f"SELECT {select_clause} FROM {table_name} {where_clause};"
+    # 拼接完整 SQL
+    sql = f"""SELECT
+    {select_clause}
+FROM {table_name}
+{where_clause};
+"""
     return sql
-
