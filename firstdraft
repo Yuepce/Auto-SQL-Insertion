@@ -3,16 +3,19 @@ from io import StringIO
 
 def generate_sql_queries_from_text(raw_text: str, table_name: str, use_star=True) -> list:
     """
-    从复制粘贴的Excel文本中生成 SQL SELECT 查询语句。
-    
-    参数：
-    - raw_text: 从Excel中复制出来的文本内容（包含列名）
-    - table_name: SQL查询的目标表名
-    - use_star: 是否使用 SELECT *（默认True），否则列出具体列名
-    
-    返回：SQL查询语句列表
+    从 Excel 粘贴的文本中生成 SQL 查询语句，支持 employer_account_code 和 member_account_code。
+    自动处理数值型 ID 去除小数点后的 .0。
     """
-    # 解析复制的纯文本数据（通常是制表符分隔）
+
+    # 嵌套的辅助函数：用于格式化 ID，避免出现如 8800000.0
+    def format_id(value):
+        if pd.isna(value):
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value).strip()
+
+    # 读取 Excel 粘贴的文本内容
     df = pd.read_csv(StringIO(raw_text), sep='\t')
 
     sql_list = []
@@ -22,28 +25,30 @@ def generate_sql_queries_from_text(raw_text: str, table_name: str, use_star=True
     for _, row in df.iterrows():
         if pd.notna(row.get("employer_account_code")):
             value = row["employer_account_code"]
-            where_clause = f"employer_account_code = '{value}'"
+            where_clause = f"employer_account_code = '{format_id(value)}'"
         elif pd.notna(row.get("member_account_code")):
             value = row["member_account_code"]
-            where_clause = f"member_account_code = '{value}'"
+            where_clause = f"member_account_code = '{format_id(value)}'"
         else:
             continue
-        
+
         sql = f"SELECT {select_clause} FROM {table_name} WHERE {where_clause};"
         sql_list.append(sql)
 
     return sql_list
 
-# 复制的Excel文本粘贴到下面三引号内
+
 excel_text = """
 employer_account_code	member_account_code
 20000100	
 8800000	200100010
 20000101	
 8800001	200100011
+20000102	
+8800002	200100012
 """
 
-queries = generate_sql_queries_from_text(excel_text, table_name="tb_member_account")
+queries = generate_sql_queries_from_text(excel_text, table_name="ra_rebate_details_account")
 
 for q in queries:
     print(q)
