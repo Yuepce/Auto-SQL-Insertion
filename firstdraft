@@ -1,71 +1,52 @@
-import re
-from io import StringIO
+def generate_sql_strict_by_column_position(table_name, input_text, where_cols):
+    import re
 
-def generate_sql_with_strict_alignment(table_name, input_text, where_cols):
-    """
-    从 Excel 粘贴数据中构建 SQL，强制按照表头列数对齐，避免错列。
-    参数：
-    - table_name: 表名
-    - input_text: Excel 粘贴内容
-    - where_cols: 用于 WHERE 的列名列表
-    返回：
-    - str: SQL 查询语句
-    """
-    # 替换所有连续多空格为单个 \t，模拟粘贴数据中的列对齐
-    lines = [re.sub(r' {2,}', '\t', line.strip()) for line in input_text.strip().splitlines() if line.strip()]
+    # Step 1: 预处理：分行并清洗（支持粘贴空格或tab）
+    lines = [re.sub(r'\s+', '\t', line.strip()) for line in input_text.strip().splitlines() if line.strip()]
     
-    # 拆解首行列名
+    # Step 2: 拿到列名 & 列数
     header = lines[0].split('\t')
     num_cols = len(header)
-
-    # 校验 WHERE 列是否都存在
-    missing = [col for col in where_cols if col not in header]
-    if missing:
-        return f"-- ERROR: Missing WHERE columns: {missing}"
-    
     where_indices = [header.index(col) for col in where_cols]
 
-    # 处理数据行
-    data_rows = []
+    # Step 3: 处理每一行：即使字段缺失，也补齐为列数
+    rows = []
     for line in lines[1:]:
-        fields = line.split('\t')
-        if all(not f.strip() for f in fields):
+        row = line.split('\t')
+        if all(cell.strip() == '' for cell in row):
             continue
-        # 补齐或截断字段
-        fields = [f.strip() for f in fields]
-        if len(fields) < num_cols:
-            fields += [''] * (num_cols - len(fields))
-        elif len(fields) > num_cols:
-            fields = fields[:num_cols]
-        data_rows.append(fields)
+        row = [cell.strip() for cell in row]
+        if len(row) < num_cols:
+            row += [''] * (num_cols - len(row))
+        else:
+            row = row[:num_cols]
+        rows.append(row)
 
-    # 构建 WHERE 子句
-    where_clauses = []
-    for row in data_rows:
-        parts = []
-        for idx, col in zip(where_indices, where_cols):
-            val = row[idx]
-            if val == '':
-                parts.append(f"{col} IS NULL")
-            else:
-                parts.append(f"{col} = '{val}'")
-        where_clauses.append("    (" + " AND ".join(parts) + ")")
+    # Step 4: 构造 WHERE 子句
+    conditions = []
+    for row in rows:
+        clause = []
+        for i in where_indices:
+            val = row[i]
+            clause.append(f"{header[i]} IS NULL" if val == '' else f"{header[i]} = '{val}'")
+        conditions.append("    (" + " AND ".join(clause) + ")")
 
+    # Step 5: 拼接 SQL
     select_clause = ",\n    ".join(header)
-    where_block = "\nOR\n".join(where_clauses)
+    where_clause = "\nOR\n".join(conditions)
 
     sql = f"""SELECT
     {select_clause}
 FROM {table_name}
 WHERE (
-{where_block}
+{where_clause}
 );
 """
     return sql
 
-sql = generate_sql_with_strict_alignment(
+sql = generate_sql_strict_by_column_position(
     table_name="ra_rebate_details_funds",
-    input_text=your_raw_text,  # 上述粘贴内容
+    input_text=your_input_text,
     where_cols=["employer_account_code", "member_account_code"]
 )
 print(sql)
