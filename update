@@ -1,126 +1,71 @@
+import csv
 import re
+from io import StringIO
 
-def generate_sorted_sql_query(table_name, input_text, target_cols=None):
+def generate_sql_query_custom_columns(table_name, input_text, selected_cols):
     """
-    根据输入的表内容生成格式化的SQL查询，WHERE条件按目标列排序
-    
+    构建格式化 SQL 查询，仅使用手动指定字段作为 SELECT 和 WHERE 的依据
+
     参数:
-    table_name (str): 数据库表名
-    input_text (str): 表内容文本
-    target_cols (list/None): 可选，用于WHERE条件的目标列名列表。如果为None则自动选择包含特定关键词的列
-    
+    - table_name (str): 数据表名
+    - input_text (str): 从Excel复制粘贴的表格文本（支持多空格）
+    - selected_cols (list[str]): 用户指定字段名（必须是列中存在的）
+
     返回:
-    str: 格式化的SQL查询语句
+    - str: 格式化 SQL 查询语句
     """
-    # 分割文本行并移除空行
-    lines = [line.strip() for line in input_text.split('\n') if line.strip()]
-    
-    if not lines:
-        return f"SELECT * FROM {table_name} /* No data provided */"
-    
-    # 提取列名 - 使用正则匹配任意空格分隔
-    columns = re.split(r'\s+', lines[0])
-    columns = [col.strip() for col in columns if col.strip()]
-    
-    # 自动识别目标列（如果未提供） - 简化选择逻辑
-    if target_cols is None:
-        # 优先选择包含关键字的列
-        priority_cols = [
-            col for col in columns 
-            if any(keyword in col.lower() 
-                  for keyword in ['id', 'code', 'cd'])
-        ]
-        
-        # 如果找不到优先列，选择前2-3列
-        if priority_cols:
-            target_cols = priority_cols[:3]  # 最多取3列
-        elif len(columns) >= 3:
-            target_cols = columns[:3]
-        elif len(columns) == 2:
-            target_cols = columns[:2]
-        else:
-            target_cols = columns.copy()
-    
-    # 处理数据行 - 使用空格分割并保留所有字段
-    data_rows = []
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-            
-        # 使用空格分割行数据
-        row_data = re.split(r'\s+', line)
-        
-        # 补齐缺失列
-        if len(row_data) < len(columns):
-            row_data.extend([''] * (len(columns) - len(row_data)))
-        elif len(row_data) > len(columns):
-            row_data = row_data[:len(columns)]
-            
-        data_rows.append([cell.strip() for cell in row_data])
-    
-    # 验证目标列是否存在
-    for col in target_cols:
-        if col not in columns:
-            raise ValueError(f"目标列 '{col}' 不在表列中")
-    
-    # 获取目标列的索引
-    col_indices = [columns.index(col) for col in target_cols]
-    
-    # 收集所有行数据（不去重）
-    all_values = []
+
+    # 替换粘贴中的特殊空格并将多空格转换为 tab 分隔
+    input_text = input_text.strip().replace('\xa0', ' ')
+    input_text = '\n'.join([
+        re.sub(r' {2,}', '\t', line.strip())
+        for line in input_text.strip().splitlines()
+    ])
+
+    reader = csv.reader(StringIO(input_text), delimiter='\t')
+    rows = list(reader)
+    if not rows:
+        return "-- No data found in input_text."
+
+    all_columns = [col.strip() for col in rows[0]]
+    data_rows = rows[1:]
+
+    # 验证字段是否存在
+    missing_cols = [col for col in selected_cols if col not in all_columns]
+    if missing_cols:
+        return f"-- Error: The following selected columns are not found in the data: {missing_cols}"
+
+    selected_indices = [all_columns.index(col) for col in selected_cols]
+
+    # 清洗有效行
+    clean_rows = []
     for row in data_rows:
-        combination = tuple(row[i] for i in col_indices)
-        all_values.append(combination)
-    
-    # 格式化SELECT子句 - 每列单独一行
-    select_clause = ",\n    ".join(columns)
-    
-    # 格式化WHERE子句 - 每行一个元组值（空值转换为NULL）
+        if len(row) < len(all_columns):
+            row += [''] * (len(all_columns) - len(row))
+        row = row[:len(all_columns)]
+        if all(cell.strip() == '' for cell in row):
+            continue
+        clean_rows.append([cell.strip() for cell in row])
+
+    # 生成 WHERE 的元组值
     where_values = []
-    for tup in all_values:
-        quoted_values = []
-        for value in tup:
-            # 空值转换为SQL的NULL
-            if value == '':
-                quoted_values.append('NULL')
-            else:
-                quoted_values.append(f"'{value}'")
-        where_values.append(f"    ({', '.join(quoted_values)})")
-    
-    # 构建格式化的SQL查询
+    for row in clean_rows:
+        values = [
+            'NULL' if row[idx] == '' else f"'{row[idx]}'"
+            for idx in selected_indices
+        ]
+        where_values.append(f"    ({', '.join(values)})")
+
+    select_clause = ",\n    ".join(selected_cols)
+    where_clause = f"({', '.join(selected_cols)}) IN (\n{',\n'.join(where_values)}\n)"
+
     sql = f"""SELECT
     {select_clause}
 FROM {table_name}
-WHERE ({', '.join(target_cols)}) IN (
-{',\n'.join(where_values)}
-);"""
-    
+WHERE {where_clause};
+"""
     return sql
 
-
-SELECT
-    DELETE_FLAG,
-    EMPLR_ACCT_CD,
-    PAYROLL_GROUP_ID,
-    MBR_ACCT_CD,
-    MBR_ACCT_TYPE,
-    STATUS_CD,
-    GENDER,
-    DATE_OF_BIRTH,
-    DATE_JOINING_THE_SCHM,
-    TERM_DATE
-FROM tb_employer_account
-WHERE (EMPLR_ACCT_CD, PAYROLL_GROUP_ID, MBR_ACCT_CD) IN (
-    ('6600449990', 'LY001', '88334400'),
-    ('6600449991', 'LY002', '88334401'),
-    ('6600449992', 'LY003', '88334402'),
-    ('6600449993', 'LY004', '88334403'),
-    ('6600449994', 'LY005', '88334404'),
-    ('6600449995', 'LY006', '88334405'),
-    ('6600449996', 'LY007', '88334406'),
-    ('6600449997', 'LY008', '88334407'),
-    ('6600449998', 'LY009', '88334408'),
-    ('6600449999', 'LY010', '88334409'),
-    ('6600450000', 'LY011', '88334410'),
-    ('6600450001', 'LY012', '88334411')
-);
+selected_fields = ["emplr_acct_cd", "mbr_acct_cd"]  # 手动指定字段
+sql = generate_sql_query_custom_columns("ra_rebate_details_account", input_text, selected_fields)
+print(sql)
