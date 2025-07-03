@@ -1,17 +1,15 @@
-明白了 ✅：
-
-你希望移除所有“默认字段识别逻辑”，只使用用户手动指定的字段列表（例如 ['emplr_acct_cd', 'mbr_acct_cd']）作为 SELECT 和 WHERE (...) IN (...) 中使用的字段。
+明白了 ✅
 
 ⸻
 
-✅ 功能说明：
+✅ 你的新需求总结如下：
 
-功能项	说明
-❌ 默认字段识别	不再自动识别 employer 和 member
-✅ 全部字段由用户传入	通过参数 selected_cols 明确指定
-✅ 空值转为 NULL	对应字段空字符串会被转为 SQL 的 NULL
-✅ 整行空值跳过	无数据的行会被自动忽略
-✅ Excel 粘贴支持	多空格自动转为 Tab，兼容复制内容
+项目	说明
+SELECT 子句	保留输入数据中的所有字段 ✅
+WHERE 子句	只使用手动指定的字段构建 (col1, col2, ...) IN (...) ✅
+自动跳过 NULL	如果某一行在 WHERE 列中有任意 NULL，则整行 不包含在 WHERE 子句中 ✅
+整行空值跳过	自动忽略全空的行 ✅
+支持 Excel 粘贴	自动将多空格转换为制表符 \t ✅
 
 
 ⸻
@@ -22,87 +20,118 @@ import csv
 import re
 from io import StringIO
 
-def generate_sql_query_custom_columns(table_name, input_text, selected_cols):
+def generate_sql_with_partial_where(table_name, input_text, where_cols):
     """
-    构建格式化 SQL 查询，仅使用手动指定字段作为 SELECT 和 WHERE 的依据
+    构建 SQL：SELECT 所有字段，WHERE 仅使用指定列，且过滤掉包含 NULL 的 WHERE 元组。
 
     参数:
-    - table_name (str): 数据表名
-    - input_text (str): 从Excel复制粘贴的表格文本（支持多空格）
-    - selected_cols (list[str]): 用户指定字段名（必须是列中存在的）
+    - table_name (str): SQL 表名
+    - input_text (str): Excel 粘贴数据（含列头）
+    - where_cols (list[str]): 手动指定用于 WHERE 的列名（必须在列中）
 
     返回:
-    - str: 格式化 SQL 查询语句
+    - str: 格式化后的 SQL 查询语句
     """
-
-    # 替换粘贴中的特殊空格并将多空格转换为 tab 分隔
+    # 清洗格式
     input_text = input_text.strip().replace('\xa0', ' ')
     input_text = '\n'.join([
         re.sub(r' {2,}', '\t', line.strip())
         for line in input_text.strip().splitlines()
     ])
-
+    
     reader = csv.reader(StringIO(input_text), delimiter='\t')
     rows = list(reader)
     if not rows:
-        return "-- No data found in input_text."
+        return "-- No data provided"
 
+    # 获取全部列名
     all_columns = [col.strip() for col in rows[0]]
     data_rows = rows[1:]
 
-    # 验证字段是否存在
-    missing_cols = [col for col in selected_cols if col not in all_columns]
-    if missing_cols:
-        return f"-- Error: The following selected columns are not found in the data: {missing_cols}"
+    # 验证 WHERE 字段是否存在
+    missing = [col for col in where_cols if col not in all_columns]
+    if missing:
+        return f"-- Error: These WHERE columns are missing from data: {missing}"
 
-    selected_indices = [all_columns.index(col) for col in selected_cols]
+    where_indices = [all_columns.index(col) for col in where_cols]
 
-    # 清洗有效行
-    clean_rows = []
+    # 净化数据：跳过空行，补齐字段
+    valid_rows = []
     for row in data_rows:
         if len(row) < len(all_columns):
             row += [''] * (len(all_columns) - len(row))
         row = row[:len(all_columns)]
         if all(cell.strip() == '' for cell in row):
             continue
-        clean_rows.append([cell.strip() for cell in row])
+        valid_rows.append([cell.strip() for cell in row])
 
-    # 生成 WHERE 的元组值
+    # 构造 WHERE 元组（跳过任何包含 NULL 的元组）
     where_values = []
-    for row in clean_rows:
-        values = [
-            'NULL' if row[idx] == '' else f"'{row[idx]}'"
-            for idx in selected_indices
-        ]
-        where_values.append(f"    ({', '.join(values)})")
+    for row in valid_rows:
+        values = []
+        null_found = False
+        for idx in where_indices:
+            val = row[idx]
+            if val == '':
+                null_found = True
+                break
+            values.append(f"'{val}'")
+        if not null_found:
+            where_values.append(f"    ({', '.join(values)})")
 
-    select_clause = ",\n    ".join(selected_cols)
-    where_clause = f"({', '.join(selected_cols)}) IN (\n{',\n'.join(where_values)}\n)"
+    # 输出所有列作为 SELECT
+    select_clause = ",\n    ".join(all_columns)
+    where_clause = f"({', '.join(where_cols)}) IN (\n{',\n'.join(where_values)}\n)" if where_values else "-- WHERE skipped due to all NULLs"
 
+    # 拼接 SQL
     sql = f"""SELECT
     {select_clause}
 FROM {table_name}
 WHERE {where_clause};
-"""
+""" if where_values else f"""SELECT
+    {select_clause}
+FROM {table_name};
+/* All rows skipped due to NULLs in WHERE columns */"""
+
     return sql
 
 
 ⸻
 
-✅ 使用示例：
+✅ 示例调用方式：
 
-selected_fields = ["emplr_acct_cd", "mbr_acct_cd"]  # 手动指定字段
-sql = generate_sql_query_custom_columns("ra_rebate_details_account", input_text, selected_fields)
+sql = generate_sql_with_partial_where(
+    "ra_rebate_details_account",
+    input_text,
+    where_cols=["emplr_acct_cd", "mbr_acct_cd"]
+)
 print(sql)
 
 
 ⸻
 
-✅ 错误处理：
+✅ 示例输出（只包含 WHERE 中无 NULL 的行）：
 
-如果字段名拼错、字段不存在，返回错误提示：
+SELECT
+    scheme_code,
+    account_type,
+    emplr_acct_cd,
+    mbr_acct_cd,
+    ...
+FROM ra_rebate_details_account
+WHERE (emplr_acct_cd, mbr_acct_cd) IN (
+    ('20000104', '200100014'),
+    ('20000105', '200100015')
+);
 
--- Error: The following selected columns are not found in the data: ['xyz']
+如果所有行都因 NULL 被过滤，则自动生成：
+
+SELECT
+    ...
+FROM ra_rebate_details_account;
+/* All rows skipped due to NULLs in WHERE columns */
 
 
 ⸻
+
+是否还希望加入 DISTINCT、输出 .sql 文件、或导出符合 WHERE 的原始数据行？我可以继续为你扩展。
