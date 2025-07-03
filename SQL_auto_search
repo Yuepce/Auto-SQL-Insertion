@@ -1,5 +1,3 @@
-✅ 修改后完整代码如下：
-
 import csv
 import re
 from io import StringIO
@@ -75,33 +73,53 @@ WHERE {where_clause};
     return sql
 
 
-⸻
+# 使用示例 1：只使用默认字段
+input_text = """
+scheme_code	account_type	employer_account_code	member_account_code	regular_rebate_applicable	annual_rebate_applicable	regular_rebate_distribution_subacct	regular_rebate_distribution_fund	regular_rebate_calculation_option	regular_rebate_allow_rollover	annual_rebate_allow_rollover	source_employer_code	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by	delete_flag
+RB	ER	20000100		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	ER	20000101		N	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	ER	20000102		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+																
+RB	ER	20000103		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	N		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+																
+RB	ER	20000104		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	ER	20000105		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100015	N	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	ER	20000106		N	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100016	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	ER	20000107		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	PAH		200100017	Y	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	ER	20000108		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	PAH		200100018	Y	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	ER	20000109		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100019	Y	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	ER	20000110		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100020	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	ER	20000111		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100021	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	ER	20000112		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100022	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+																
+RB	ER	20000113		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100023	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	ER	20000114		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+"""
 
-✅ 示例调用：
 
 sql = generate_sql_with_explicit_nulls(
-    "ra_rebate_details_account",
+    "ra_rebate_details_funds",
     input_text,
-    where_cols=["emplr_acct_cd", "mbr_acct_cd"]
+    where_cols=["employer_account_code", "member_account_code"]
 )
 print(sql)
-
-
-⸻
-
-✅ 示例输出 SQL：
-
-SELECT
-    emplr_acct_cd,
-    mbr_acct_cd,
-    ...
-FROM ra_rebate_details_account
-WHERE (
-    (emplr_acct_cd = '20000100' AND mbr_acct_cd IS NULL)
-OR  (emplr_acct_cd IS NULL AND mbr_acct_cd = '200100014')
-OR  (emplr_acct_cd = '20000105' AND mbr_acct_cd IS NULL)
-);
-
-
-⸻
-
