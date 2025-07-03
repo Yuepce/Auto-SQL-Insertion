@@ -1,51 +1,57 @@
 import csv
+import re
 from io import StringIO
 
-def generate_full_column_sql_query(table_name, input_text):
-    # 替换多空格为 \t 以兼容 Excel 粘贴（有时会变成空格间隔）
-    input_text = input_text.strip().replace('\xa0', ' ')  # 去除粘贴中的非断行空格
+def generate_filtered_sql_query(table_name, input_text):
+    # 替换多空格为 \t，兼容从 Excel 复制内容
+    input_text = input_text.strip().replace('\xa0', ' ')  # 移除粘贴带入的特殊空格
     input_text = '\n'.join([
-        re.sub(r' {2,}', '\t', line.strip())  # 多空格视作列间距，替换为 \t
+        re.sub(r' {2,}', '\t', line.strip())
         for line in input_text.strip().splitlines()
     ])
-    
+
     reader = csv.reader(StringIO(input_text), delimiter='\t')
     rows = list(reader)
-    
     if not rows:
         return f"SELECT * FROM {table_name} /* No data provided */"
 
-    # 提取列名
+    # 所有字段
     columns = [col.strip() for col in rows[0]]
     data_rows = rows[1:]
 
-    # 准备有效数据（过滤掉整行空值）
+    # 自动识别过滤字段（WHERE）
+    filter_keywords = ['code', 'type', 'fund', 'date']
+    where_columns = [
+        col for col in columns
+        if any(key in col.lower() for key in filter_keywords)
+    ]
+    where_indices = [columns.index(col) for col in where_columns]
+
+    if not where_columns:
+        return f"-- No matching filter columns found for keywords: {filter_keywords}"
+
+    # 净化数据，保留有效行
     clean_data_rows = []
     for row in data_rows:
-        # 补齐或截断字段数
         if len(row) < len(columns):
             row += [''] * (len(columns) - len(row))
         elif len(row) > len(columns):
             row = row[:len(columns)]
-        
-        # 跳过整行空的记录
         if all(cell.strip() == '' for cell in row):
             continue
-        
         clean_data_rows.append([cell.strip() for cell in row])
 
-    # 构造 WHERE 子句内容
+    # 构造 WHERE 条件
     where_values = []
     for row in clean_data_rows:
-        formatted = [
-            'NULL' if cell == '' else f"'{cell}'"
-            for cell in row
+        filtered = [
+            'NULL' if row[i] == '' else f"'{row[i]}'"
+            for i in where_indices
         ]
-        where_values.append(f"    ({', '.join(formatted)})")
+        where_values.append(f"    ({', '.join(filtered)})")
 
-    # 拼接 SQL 语句
     select_clause = ",\n    ".join(columns)
-    where_clause = f"({', '.join(columns)}) IN (\n{',\n'.join(where_values)}\n)"
+    where_clause = f"({', '.join(where_columns)}) IN (\n{',\n'.join(where_values)}\n)"
 
     sql = f"""SELECT
     {select_clause}
@@ -53,3 +59,7 @@ FROM {table_name}
 WHERE {where_clause};
 """
     return sql
+
+
+table_name = "ra_rebate_details_account"
+print(generate_filtered_sql_query(table_name, input_text))
