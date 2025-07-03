@@ -1,22 +1,24 @@
-✅ 修改后完整的 Python 函数（纯文本输入）
+✅ 解决方法（推荐方案）：
 
-你只需复制 Excel 内容（包括列名），粘贴成文本传给函数，它会自动处理顺序匹配。
+使用 Pandas 的显示设置 pd.set_option() 来控制显示宽度、列数、是否截断等。
+
+⸻
+
+✅ 修改后的代码（附加显示设置）：
 
 import pandas as pd
 from io import StringIO
 
 def restore_order_from_text(table_a_text: str, table_b_text: str, key_columns: list) -> pd.DataFrame:
     """
-    将表B按表A的指定列顺序还原。
-
-    参数：
-    - table_a_text: 表A的复制粘贴文本（参考顺序）
-    - table_b_text: 表B的复制粘贴文本（乱序，需要还原）
-    - key_columns: 用于匹配顺序的主键列列表（例如 ["employer_account_code", "member_account_code"]）
-
-    返回：
-    - 已排序的表B DataFrame
+    将表B按表A的指定列顺序还原，支持Excel复制的文本输入。
     """
+
+    # 设置显示选项：不折行、不截断、显示所有列
+    pd.set_option('display.max_columns', None)       # 显示所有列
+    pd.set_option('display.expand_frame_repr', False)  # 不自动换行
+    pd.set_option('display.max_colwidth', None)       # 列内容不截断
+    pd.set_option('display.width', 2000)              # 控制行宽，防止 \ 折行
 
     # 读取两份表格数据（制表符分隔）
     df_a = pd.read_csv(StringIO(table_a_text), sep='\t')
@@ -40,42 +42,16 @@ def restore_order_from_text(table_a_text: str, table_b_text: str, key_columns: l
 
 ⸻
 
-✅ 使用示例：
+✅ 使用时保持输出完整：
 
-# 复制Excel中的表A内容
-table_a_text = """
-scheme_code	account_type	employer_account_code	member_account_code
-RB	ER	20000100	
-RB	PAH	8800000	200100010
-RB	ER	20000101	
-RB	PAH	8800001	200100011
-"""
-
-# 复制Excel中的表B内容（顺序乱了）
-table_b_text = """
-scheme_code	account_type	employer_account_code	member_account_code
-RB	PAH	8800001	200100011
-RB	ER	20000101	
-RB	PAH	8800000	200100010
-RB	ER	20000100	
-"""
-
-# 指定按哪几列匹配顺序
-sorted_df = restore_order_from_text(table_a_text, table_b_text, ["employer_account_code", "member_account_code"])
-
-# 打印结果
-print(sorted_df)
+# 打印完整 DataFrame，不换行、不折断
+print(restore_order_from_text(table_a_text, table_b_text, ["employer_account_code", "member_account_code"]))
 
 
 ⸻
 
-✅ 输出：
+✅ 或者你也可以保存为 Excel：
 
-scheme_code	account_type	employer_account_code	member_account_code
-RB	ER	20000100	
-RB	PAH	8800000	200100010
-RB	ER	20000101	
-RB	PAH	8800001	200100011
+restore_order_from_text(table_a_text, table_b_text, ["employer_account_code", "member_account_code"]) \
+    .to_excel("restored_output.xlsx", index=False)
 
-
-⸻
