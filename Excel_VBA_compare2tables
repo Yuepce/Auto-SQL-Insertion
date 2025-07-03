@@ -82,34 +82,33 @@ print(vba_script)
 
 ✅ 对比两个 Excel 表格（结构相同，行列完全一致），逐格比较内容，将 表B中与表A不同的单元格用红色高亮显示。
 ❌ 不再使用 key columns，也不再进行匹配，只是 纯位置对应的比较（按 row/col 对齐）。
-
 Sub HighlightTableDifferences()
     Dim ws As Worksheet
     Set ws = ActiveSheet
 
-    ' 设置两个表的范围（根据你的实际数据调整）
+    ' Define the two table ranges
     Dim rngA As Range, rngB As Range
-    Set rngA = ws.Range("A2:Z100")   ' 表A的范围
-    Set rngB = ws.Range("A102:Z200") ' 表B的范围
+    Set rngA = ws.Range("A2:Z100")   ' Table A range
+    Set rngB = ws.Range("A102:Z200") ' Table B range
 
-    ' 清除表B的旧高亮
+    ' Clear previous highlights in Table B
     rngB.Interior.Pattern = xlNone
 
-    ' 检查尺寸是否一致
+    ' Check if dimensions match
     If rngA.Rows.Count <> rngB.Rows.Count Or rngA.Columns.Count <> rngB.Columns.Count Then
-        MsgBox "两个表格的尺寸不一致，无法逐格比较", vbExclamation
+        MsgBox "The two tables have different dimensions. Cannot compare cell-by-cell.", vbExclamation
         Exit Sub
     End If
 
-    ' 逐格比较并高亮不同
+    ' Compare cell-by-cell and highlight differences
     Dim r As Long, c As Long
     For r = 1 To rngA.Rows.Count
         For c = 1 To rngA.Columns.Count
             If rngA.Cells(r, c).Value <> rngB.Cells(r, c).Value Then
-                rngB.Cells(r, c).Interior.Color = RGB(255, 0, 0)  ' 红色高亮
+                rngB.Cells(r, c).Interior.Color = RGB(255, 0, 0)  ' Highlight in red
             End If
         Next c
     Next r
 
-    MsgBox "✅ 差异高亮完成！", vbInformation
+    MsgBox "Difference highlighting completed!", vbInformation
 End Sub
