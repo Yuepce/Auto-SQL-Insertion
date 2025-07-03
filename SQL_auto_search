@@ -1,51 +1,71 @@
+✅ 修改后完整代码如下：
+
 import csv
+import re
 from io import StringIO
 
-def generate_sql_search(table_name, input_text):
-    # 替换多空格为 \t 以兼容 Excel 粘贴（有时会变成空格间隔）
-    input_text = input_text.strip().replace('\xa0', ' ')  # 去除粘贴中的非断行空格
+def generate_sql_with_explicit_nulls(table_name, input_text, where_cols):
+    """
+    构建 SQL：SELECT 所有字段；WHERE 仅使用指定列，并自动将 NULL 拆为 IS NULL。
+
+    参数:
+    - table_name (str): SQL 表名
+    - input_text (str): 粘贴数据（含列头）
+    - where_cols (list[str]): 用于 WHERE 的列名
+
+    返回:
+    - str: 完整 SQL 查询语句
+    """
+    input_text = input_text.strip().replace('\xa0', ' ')
     input_text = '\n'.join([
-        re.sub(r' {2,}', '\t', line.strip())  # 多空格视作列间距，替换为 \t
+        re.sub(r' {2,}', '\t', line.strip())
         for line in input_text.strip().splitlines()
     ])
-    
+
     reader = csv.reader(StringIO(input_text), delimiter='\t')
     rows = list(reader)
-    
     if not rows:
-        return f"SELECT * FROM {table_name} /* No data provided */"
+        return "-- No data provided"
 
-    # 提取列名
-    columns = [col.strip() for col in rows[0]]
+    all_columns = [col.strip() for col in rows[0]]
     data_rows = rows[1:]
 
-    # 准备有效数据（过滤掉整行空值）
-    clean_data_rows = []
+    # 校验列存在性
+    missing = [col for col in where_cols if col not in all_columns]
+    if missing:
+        return f"-- Error: These WHERE columns are missing from data: {missing}"
+
+    where_indices = [all_columns.index(col) for col in where_cols]
+
+    # 清洗有效行
+    valid_rows = []
     for row in data_rows:
-        # 补齐或截断字段数
-        if len(row) < len(columns):
-            row += [''] * (len(columns) - len(row))
-        elif len(row) > len(columns):
-            row = row[:len(columns)]
-        
-        # 跳过整行空的记录
+        if len(row) < len(all_columns):
+            row += [''] * (len(all_columns) - len(row))
+        row = row[:len(all_columns)]
         if all(cell.strip() == '' for cell in row):
             continue
-        
-        clean_data_rows.append([cell.strip() for cell in row])
+        valid_rows.append([cell.strip() for cell in row])
 
-    # 构造 WHERE 子句内容
-    where_values = []
-    for row in clean_data_rows:
-        formatted = [
-            'NULL' if cell == '' else f"'{cell}'"
-            for cell in row
-        ]
-        where_values.append(f"    ({', '.join(formatted)})")
+    # 构造 WHERE 条件（每行转成一个 AND 表达式）
+    where_clauses = []
+    for row in valid_rows:
+        clause_parts = []
+        for idx, col in zip(where_indices, where_cols):
+            val = row[idx].strip()
+            if val == '':
+                clause_parts.append(f"{col} IS NULL")
+            else:
+                clause_parts.append(f"{col} = '{val}'")
+        where_clauses.append("    (" + " AND ".join(clause_parts) + ")")
 
-    # 拼接 SQL 语句
-    select_clause = ",\n    ".join(columns)
-    where_clause = f"({', '.join(columns)}) IN (\n{',\n'.join(where_values)}\n)"
+    # 构建最终 SQL
+    select_clause = ",\n    ".join(all_columns)
+    if where_clauses:
+        where_block = "\nOR\n".join(where_clauses)
+        where_clause = f"(\n{where_block}\n)"
+    else:
+        where_clause = "1 = 0  -- no valid conditions"
 
     sql = f"""SELECT
     {select_clause}
@@ -55,24 +75,33 @@ WHERE {where_clause};
     return sql
 
 
-# 示例使用
-# if __name__ == "__main__":
-input_text = """
-scheme_code	account_type	employer_account_code	member_account_code	regular_rebate_applicable	annual_rebate_applicable	regular_rebate_distribution_subacct	regular_rebate_distribution_fund	regular_rebate_calculation_option	regular_rebate_allow_rollover	annual_rebate_allow_rollover	source_employer_code	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by	delete_flag
-RB	ER	20000100		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-																
-RB	ER	20000101		N	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-																
-RB	ER	20000102		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-																
-																
-RB	ER	20000103		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	N		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-																
-																
-RB	ER	20000104		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-RB	PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
-"""
+⸻
 
-table_name = "ra_rebate_details_account"
-sql_query = generate_sql_search(table_name, input_text)
-print(sql_query)
+✅ 示例调用：
+
+sql = generate_sql_with_explicit_nulls(
+    "ra_rebate_details_account",
+    input_text,
+    where_cols=["emplr_acct_cd", "mbr_acct_cd"]
+)
+print(sql)
+
+
+⸻
+
+✅ 示例输出 SQL：
+
+SELECT
+    emplr_acct_cd,
+    mbr_acct_cd,
+    ...
+FROM ra_rebate_details_account
+WHERE (
+    (emplr_acct_cd = '20000100' AND mbr_acct_cd IS NULL)
+OR  (emplr_acct_cd IS NULL AND mbr_acct_cd = '200100014')
+OR  (emplr_acct_cd = '20000105' AND mbr_acct_cd IS NULL)
+);
+
+
+⸻
+
