@@ -1,3 +1,5 @@
+帮我修改以下代码，使得符合预期的输出内容：
+
 import re
 
 def generate_sorted_sql_query(table_name, input_text, target_cols=None):
@@ -98,26 +100,87 @@ WHERE ({', '.join(target_cols)}) IN (
     return sql
 
 
-
-
+当我输入以下内容的时候：
 # 示例使用
 # if __name__ == "__main__":
 input_text = """
-DELETE_FLAG	EMPLR_ACCT_CD	STATUS_CD	ORIG_EMPLR_CD
-N	6600449990	ACTIVE	 
-N	6600449991	ACTIVE	 
-N	6600449992	ACTIVE	 
-N	6600449993	ACTIVE	 
-N	6600449994	ACTIVE	315968
-N	6600449995	ACTIVE	321424
-N	6600449996	ACTIVE	327393
-Y	6600449997	ACTIVE	 
-N	6600449998	ACTIVE	 
-N	6600449999	ACTIVE	 
-N	6600450000	ACTIVE	 
-N	6600450001	ACTIVE 	  
+scheme_code	account_type	employer_account_code	member_account_code	regular_rebate_applicable	annual_rebate_applicable	regular_rebate_distribution_subacct	regular_rebate_distribution_fund	regular_rebate_calculation_option	regular_rebate_allow_rollover	annual_rebate_allow_rollover	source_employer_code	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by	delete_flag
+RB	ER	20000100		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	ER	20000101		N	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+RB	ER	20000102		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+																
+RB	ER	20000103		Y	Y	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	N		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+																
+																
+RB	ER	20000104		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100014	Y	N	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	ER	20000105		Y	N	Default Benefits	As per Investment Mandate	NAV	Y (5 years)	Y		2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
+RB	PAH		200100015	N	Y	Default Benefits	As per Investment Mandate	NAV				2025-01-01 00:00:00	SYSTEM	2025-01-01 00:00:00	SYSTEM	N
 """
 
-table_name = "tb_employer_account"
+table_name = "ra_rebate_details_account"
 sql_query = generate_sorted_sql_query(table_name, input_text)
 print(sql_query)
+
+输出为：
+SELECT
+    scheme_code,
+    account_type,
+    employer_account_code,
+    member_account_code,
+    regular_rebate_applicable,
+    annual_rebate_applicable,
+    regular_rebate_distribution_subacct,
+    regular_rebate_distribution_fund,
+    regular_rebate_calculation_option,
+    regular_rebate_allow_rollover,
+    annual_rebate_allow_rollover,
+    source_employer_code,
+    record_creation_datetime,
+    record_created_by,
+    record_last_update_datetime,
+    record_last_updated_by,
+    delete_flag
+FROM ra_rebate_details_account
+WHERE (scheme_code, employer_account_code, member_account_code) IN (
+    ('RB', '20000100', 'Y'),
+    ('RB', '20000101', 'N'),
+    ('RB', '20000102', 'Y'),
+    ('RB', '20000103', 'Y'),
+    ('RB', '20000104', 'Y'),
+    ('RB', '200100014', 'Y'),
+    ('RB', '20000105', 'Y'),
+    ('RB', '200100015', 'N')
+);
+
+但理应输出:
+SELECT
+    scheme_code,
+    account_type,
+    employer_account_code,
+    member_account_code,
+    regular_rebate_applicable,
+    annual_rebate_applicable,
+    regular_rebate_distribution_subacct,
+    regular_rebate_distribution_fund,
+    regular_rebate_calculation_option,
+    regular_rebate_allow_rollover,
+    annual_rebate_allow_rollover,
+    source_employer_code,
+    record_creation_datetime,
+    record_created_by,
+    record_last_update_datetime,
+    record_last_updated_by,
+    delete_flag
+FROM ra_rebate_details_account
+WHERE (scheme_code, employer_account_code, member_account_code) IN (
+    ('RB', '20000100', NULL),
+    ('RB', '20000101', NULL),
+    ('RB', '20000102', NULL),
+    ('RB', '20000103', NULL),
+    ('RB', '20000104', '200100014'),
+    ('RB', '20000105', '200100015')
+);
