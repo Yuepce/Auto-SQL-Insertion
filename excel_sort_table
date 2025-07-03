@@ -1,0 +1,24 @@
+import pandas as pd
+
+# 读取两个表
+df_a = pd.read_excel("table_a.xlsx")  # 表A：参考顺序
+df_b = pd.read_excel("table_b.xlsx")  # 表B：乱序表
+
+# 设定用于匹配的列（可以多个）
+key_cols = ["employer_account_code", "member_account_code"]
+
+# 添加“排序位置”列
+df_a["_original_order"] = range(len(df_a))
+
+# 用 key_cols 去 merge，加回排序顺序
+df_sorted = df_b.merge(
+    df_a[key_cols + ["_original_order"]],
+    on=key_cols,
+    how="left"
+).sort_values("_original_order")
+
+# 去掉排序辅助列
+df_sorted = df_sorted.drop(columns=["_original_order"])
+
+# 保存或返回
+df_sorted.to_excel("表B已排序.xlsx", index=False)
