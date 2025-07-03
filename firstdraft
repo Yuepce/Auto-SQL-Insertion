@@ -118,4 +118,3 @@ OR  (emplr_acct_cd = '20000105' AND mbr_acct_cd IS NULL)
 
 ⸻
 
-这样生成的 SQL 能完美适配 PostgreSQL 查询语义 ✅。如果你希望我扩展支持 DISTINCT 或 LIMIT，也可以继续增强。需要吗？
