@@ -1,0 +1,104 @@
+# SQL exmaple for a sorted expected results:
+
+-- ra_rebate_details_account
+
+SELECT
+    scheme_code,
+    account_type,
+    employer_account_code,
+    member_account_code,
+    regular_rebate_applicable,
+    annual_rebate_applicable,
+    regular_rebate_distribution_subacct,
+    regular_rebate_distribution_fund,
+    regular_rebate_calculation_option,
+    regular_rebate_allow_rollover,
+    annual_rebate_allow_rollover,
+    source_employer_code,
+    record_creation_datetime,
+    record_created_by,
+    record_last_update_datetime,
+    record_last_updated_by,
+    delete_flag
+FROM ra_rebate_details_account
+WHERE employer_account_code IN (
+        '20000100', '20000101', '20000102', '20000103', '20000104', '20000105', 
+	'20000106', '20000107', '20000108', '20000109', '20000110', '20000111', 
+	'20000112', '20000113', '20000114', '8800000', '8800001', '8800002', 
+	'8800003', '8800004', '8800005', '8800006', '8800007', '8800008', 
+	'8800009', '8800010', '8800011', '8800012', '8800013', '8800014'
+    )
+    OR member_account_code IN (
+        '200100010', '200100011', '200100012', '200100013', '200100014', 
+		'200100015', '200100016', '200100017', '200100018', '200100019', 
+		'200100020', '200100021', '200100022', '200100023','200100024'
+    )
+-- order by employer_account_code, member_account_code ASC
+ORDER BY
+  employer_account_code ASC,
+  member_account_code ASC,
+  CASE delete_flag
+    WHEN 'Y' THEN 0
+    WHEN 'N' THEN 1
+    ELSE 2
+  END ASC;
+
+
+DELETE FROM ra_rebate_details_account
+WHERE employer_account_code IN (
+        '20000100', '20000101', '20000102', '20000103', '20000104', '20000105', 
+	'20000106', '20000107', '20000108', '20000109', '20000110', '20000111', 
+	'20000112', '20000113', '20000114', '8800000', '8800001', '8800002', 
+	'8800003', '8800004', '8800005', '8800006', '8800007', '8800008', 
+	'8800009', '8800010', '8800011', '8800012', '8800013', '8800014'
+    )
+    OR member_account_code IN (
+        '200100010', '200100011', '200100012', '200100013', '200100014', 
+		'200100015', '200100016', '200100017', '200100018', '200100019', 
+		'200100020', '200100021', '200100022', '200100023','200100024'
+    )
+
+
+
+-- RA_REBATE_DETAILS_FUNDS
+ 
+SELECT
+    scheme_code,
+    account_type,
+    employer_account_code,
+    member_account_code,
+    rebate_type,
+    fund_code,
+    effective_start_date,
+    effective_end_date,
+    effective_management_rate,
+    annual_rebate_effective_date,
+    annual_rebate_amount,
+    annual_rebate_remarks,
+    five_years_perpetual_flag,
+    record_creation_datetime,
+    record_created_by,
+    record_last_update_datetime,
+    record_last_updated_by
+FROM ra_rebate_details_funds
+WHERE employer_account_code IN (
+        '20000100', '20000101', '20000102', '20000103', '20000104', '20000105', 
+	'20000106', '20000107', '20000108', '20000109', '20000110', '20000111', 
+	'20000112', '20000113', '20000114', '8800000', '8800001', '8800002', 
+	'8800003', '8800004', '8800005', '8800006', '8800007', '8800008', 
+	'8800009', '8800010', '8800011', '8800012', '8800013', '8800014'
+    )
+    OR member_account_code IN (
+        '200100010', '200100011', '200100012', '200100013', '200100014', 
+		'200100015', '200100016', '200100017', '200100018', '200100019', 
+		'200100020', '200100021', '200100022', '200100023','200100024'
+    )
+-- order by employer_account_code, member_account_code ASC
+ORDER BY
+  employer_account_code ASC,
+  member_account_code ASC,
+  CASE rebate_type
+    WHEN 'REGULAR' THEN 0
+    WHEN 'ANNUAL' THEN 1
+    ELSE 2
+  END ASC;
