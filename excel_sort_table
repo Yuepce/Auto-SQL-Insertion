@@ -145,3 +145,14 @@ print(restore_order_from_text(table_a_text, table_b_text, ["employer_account_cod
 sorted_df 
 
 
+
+SELECT *
+FROM your_table_name
+ORDER BY 
+  employer_account_code ASC,
+  member_account_code ASC,
+  CASE delete_flag 
+    WHEN 'Y' THEN 0
+    WHEN 'N' THEN 1
+    ELSE 2
+  END ASC;
