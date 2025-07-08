@@ -1,0 +1,213 @@
+* 主要修复内容：
+* * 列名解析问题：
+1. 使用 re.split(r'\s+', line) 替代 split("\t")，处理空格和制表符分隔的混合数据
+2. 添加了更详细的错误信息，显示可用列名
+
+* * 次列可选逻辑：
+1. 将 secondary_column 设为可选参数（Optional[str] = None）
+2. 添加条件检查：仅当提供了次列名时才处理次列值
+3. 在WHERE子句中，只有当次列值存在时才添加OR条件
+
+* * 值格式化优化：
+1. 使用专用的 _quote_string 函数确保所有值都被正确引用
+2. 处理了空值和NULL值情况
+
+* * 错误处理增强：
+1. 添加了更详细的错误信息，显示可用的列名
+2. 检查单元格值是否为空，避免添加空值到IN条件中
+
+#################################################正文开始##########################################################################
+
+## Update 2025-07-08
+import re
+import datetime
+from typing import List, Dict, Optional, Set, Tuple
+
+def _quote_string(value: str) -> str:
+    """
+    将字符串值格式化为SQL字符串（带引号），处理转义
+    """
+    value = value.strip()
+    if value == "" or value.upper() == "NULL":
+        return "NULL"
+    return "'" + value.replace("'", "''") + "'"
+
+def generate_select_sql(
+    table_name: str,
+    raw_text: str,
+    primary_column: str,
+    secondary_column: Optional[str] = None
+) -> str:
+    """
+    生成SELECT SQL语句
+    
+    参数:
+    table_name: 数据库表名
+    raw_text: 包含表头和数据的文本（空格或制表符分隔）
+    primary_column: WHERE条件的主列名（必须存在）
+    secondary_column: 可选的次列名（用于OR连接）
+    
+    返回:
+    str: 格式化的SELECT SQL语句
+    """
+    raw_text = raw_text.strip()
+    if not raw_text:
+        raise ValueError("raw_text 为空，可能没有正确复制数据")
+
+    # 拆行 + 去除空行
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("未检测到有效数据")
+
+    # 解析列名 - 使用空白字符分割
+    base_cols = [col.strip() for col in re.split(r'\s+', lines[0]) if col.strip()]
+    if not base_cols:
+        raise ValueError("未检测到列名行")
+    
+    # 检查主列名是否存在
+    if primary_column not in base_cols:
+        available_cols = ", ".join(base_cols)
+        raise ValueError(f"主列名 '{primary_column}' 不存在于数据列中。可用列: {available_cols}")
+
+    # 检查次列名是否存在（如果提供了）
+    if secondary_column and secondary_column not in base_cols:
+        available_cols = ", ".join(base_cols)
+        raise ValueError(f"次列名 '{secondary_column}' 不存在于数据列中。可用列: {available_cols}")
+
+    # 获取列索引
+    primary_idx = base_cols.index(primary_column)
+    secondary_idx = base_cols.index(secondary_column) if secondary_column else -1
+
+    # 处理数据行
+    data_rows = []
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+            
+        # 使用空白字符分割
+        cells = [cell.strip() for cell in re.split(r'\s+', line) if cell.strip()]
+        
+        # 确保单元格数量与列头匹配
+        if len(cells) < len(base_cols):
+            # 填充缺失的单元格
+            cells.extend([''] * (len(base_cols) - len(cells)))
+        elif len(cells) > len(base_cols):
+            # 截断多余的单元格
+            cells = cells[:len(base_cols)]
+            
+        data_rows.append(cells)
+
+    if not data_rows:
+        raise ValueError("没有可处理的数据行")
+
+    # 收集主列和次列的去重值
+    primary_values: Set[str] = set()
+    secondary_values: Set[str] = set()
+    
+    for row in data_rows:
+        if row[primary_idx]:
+            primary_values.add(_quote_string(row[primary_idx]))
+        
+        if secondary_column and secondary_idx != -1 and row[secondary_idx]:
+            secondary_values.add(_quote_string(row[secondary_idx]))
+
+    # 构建WHERE条件
+    def format_in_clause(values: Set[str]) -> str:
+        sorted_values = sorted(values, key=lambda x: x.strip("'"))
+        return ",\n        ".join(sorted_values)
+    
+    primary_in = format_in_clause(primary_values)
+    
+    # 构建完整SQL
+    columns_str = ",\n    ".join(base_cols)
+    
+    sql = (
+        f"SELECT\n    {columns_str}\n"
+        f"FROM {table_name}\n"
+        f"WHERE {primary_column} IN (\n        {primary_in}\n    )"
+    )
+    
+    # 添加OR条件（如果提供了次列）
+    if secondary_column and secondary_values:
+        secondary_in = format_in_clause(secondary_values)
+        sql += f"\n    OR {secondary_column} IN (\n        {secondary_in}\n    )"
+    
+    return sql + ";"
+
+####################################################使用示例#################################################################
+# 使用示例
+sample = """
+id	rebate_calculation_date	scheme_code	employer_account_code	member_account_code	payroll_group_id	account_type	sub_account_type	termination_date_of_account	rebate_type	calculation_type	fund_code	previous_month_nav	current_month_nav	average_nav	standard_management_rate	effective_management_rate	age60_management_rate	applied_rebate_rate	calculated_rebate_amount	applied_rebate_rate_normal	applied_rebate_rate_age60	calculated_rebate_amount_normal	calculated_rebate_amount_age60	total_calculated_rebate_amount_subacct	total_calculated_rebate_amount	export_status	export_file_name	export_date	empf_response_status	distribution_option	rebate_record_date	record_creation_datetime	record_created_by	record_last_update_datetime	record_last_updated_by
+(System-generated)	2025-05	RB	8800009	200100019	PG8800009	PAH	FRMC		REGULAR	REGULAR	SLDCA	0	nav_amount	#VALUE!	5	0.5		4.5	#VALUE!					14.87	14.87	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+(System-generated)	2025-05	RB	8800010	200100020	PG8800010	PAH	FRMC		REGULAR	REGULAR	SL65	0	2409.3	1204.65	5	0.2		4.8	4.82					14.87	14.87	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+(System-generated)	2025-05	RB	8800011	200100021	PG8800011	PAH	FRMC		REGULAR	REGULAR	SLDCA	0	1525	762.5	5	0.45		4.55	2.89					2.89	2.89	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+(System-generated)	2025-05	RB	8800011	200100021	PG8800011	PAH	FRMC		REGULAR	REGULAR	SL65	0	4015.5	2007.75	5	0.2		4.8	8.03					15.68	15.68	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+(System-generated)	2025-05	RB	8800012	200100022	PG8800012	PAH	FRMC		REGULAR	REGULAR	SL65	0	1525	762.5	5	0.1		4.9	3.11					15.68	15.68	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+(System-generated)	2025-05	RB	8800012	200100022	PG8800012	PAH	FRMC		REGULAR	REGULAR	SLDCA	0	2944.7	1472.35	5	0.6		4.4	5.40					19.01	19.01	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+(System-generated)	2025-05	RB	8800013	200100023	PG8800013	PAH	FRMC		REGULAR	REGULAR	SL65	0	3480.1	1740.05	5	1		4	5.80					19.01	19.01	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+(System-generated)	2025-05	RB	0	0	0	0	0		REGULAR	REGULAR	0	0	1677.5	838.75	5	0.5		4.5	3.15					3.15	3.15	PENDING						(system process datatime)	SYSTEM	(system process datatime)	SYSTEM
+"""
+
+# 生成SELECT语句
+print(generate_select_sql(
+    "RA_REBATE_RESULT_TEMP", 
+    sample, 
+    "employer_account_code", 
+    "member_account_code"
+))
+
+# 输出
+SELECT
+    id,
+    rebate_calculation_date,
+    scheme_code,
+    employer_account_code,
+    member_account_code,
+    payroll_group_id,
+    account_type,
+    sub_account_type,
+    termination_date_of_account,
+    rebate_type,
+    calculation_type,
+    fund_code,
+    previous_month_nav,
+    current_month_nav,
+    average_nav,
+    standard_management_rate,
+    effective_management_rate,
+    age60_management_rate,
+    applied_rebate_rate,
+    calculated_rebate_amount,
+    applied_rebate_rate_normal,
+    applied_rebate_rate_age60,
+    calculated_rebate_amount_normal,
+    calculated_rebate_amount_age60,
+    total_calculated_rebate_amount_subacct,
+    total_calculated_rebate_amount,
+    export_status,
+    export_file_name,
+    export_date,
+    empf_response_status,
+    distribution_option,
+    rebate_record_date,
+    record_creation_datetime,
+    record_created_by,
+    record_last_update_datetime,
+    record_last_updated_by
+FROM RA_REBATE_RESULT_TEMP
+WHERE employer_account_code IN (
+        '0',
+        '8800009',
+        '8800010',
+        '8800011',
+        '8800012',
+        '8800013'
+    )
+    OR member_account_code IN (
+        '0',
+        '200100019',
+        '200100020',
+        '200100021',
+        '200100022',
+        '200100023'
+    );
