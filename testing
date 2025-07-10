@@ -1,1 +1,26 @@
+import pyautogui
+import time
 
+# 安全设置
+pyautogui.FAILSAFE = True  # 移动到左上角可强制终止
+x, y = 500, 300
+offset = 50
+duration = 1.5
+pause_time = 15
+
+print("开始自动鼠标移动。若要停止，请点上方中断按钮（■）或移动鼠标到屏幕左上角。")
+
+try:
+    while True:
+        pyautogui.moveTo(x + offset, y, duration=duration)
+        pyautogui.click()
+        time.sleep(pause_time)
+        
+        pyautogui.moveTo(x - offset, y, duration=duration)
+        pyautogui.click()
+        time.sleep(pause_time)
+
+except KeyboardInterrupt:
+    print("已手动中断脚本。")
+except pyautogui.FailSafeException:
+    print("鼠标移动到左上角，自动终止程序。")
