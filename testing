@@ -2,27 +2,51 @@ import pyautogui
 import time
 import threading
 import keyboard
+import random
+import ctypes
 
 # 安全设置
-pyautogui.FAILSAFE = True  # 启用安全特性（鼠标移到屏幕左上角可紧急停止）
-PAUSE_REGION = (0, 0, 100, 100)  # 暂停区域（左上角100x100像素区域）
-MOVE_INTERVAL = 30  # 鼠标移动间隔（秒）
-MOVE_DISTANCE = 10  # 鼠标移动距离（像素）
+pyautogui.FAILSAFE = True  # 启用安全特性
+PAUSE_REGION = (0, 0, 100, 100)  # 暂停区域
+MOVE_INTERVAL = 60  # 主活动间隔（秒）
+KEY_INTERVAL = 30   # 键盘活动间隔（秒）
 
 # 状态跟踪
 is_paused = False
 stop_program = False
 
 def move_mouse():
-    """安全地移动鼠标位置"""
+    """更有效的鼠标移动方法"""
     current_x, current_y = pyautogui.position()
     
-    # 在当前位置附近小幅度移动
-    pyautogui.moveRel(MOVE_DISTANCE, 0, duration=0.25)
-    pyautogui.moveRel(-MOVE_DISTANCE, 0, duration=0.25)
+    # 在屏幕不同区域之间移动（模拟真实活动）
+    width, height = pyautogui.size()
     
-    # 记录日志（可选）
-    print(f"鼠标微动保持活跃 | 位置: ({current_x}, {current_y}) | 时间: {time.strftime('%H:%M:%S')}")
+    # 随机选择目标位置
+    target_x = random.randint(0, width)
+    target_y = random.randint(0, height)
+    
+    # 缓慢移动到目标位置
+    pyautogui.moveTo(target_x, target_y, duration=1.5)
+    
+    # 随机点击（约30%的概率）
+    if random.random() < 0.3:
+        pyautogui.click()
+    
+    # 记录日志
+    print(f"鼠标移动 | 位置: ({current_x}, {current_y}) → ({target_x}, {target_y}) | 时间: {time.strftime('%H:%M:%S')}")
+
+def simulate_keyboard():
+    """模拟键盘活动"""
+    # 使用虚拟键码（F13-F24通常未使用）
+    vk_code = 0x7C  # F13键
+    
+    # 发送按键按下和释放事件
+    ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0)  # 按下
+    time.sleep(0.05)
+    ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0)  # 释放
+    
+    print(f"键盘活动 | 模拟按键 | 时间: {time.strftime('%H:%M:%S')}")
 
 def check_pause_region():
     """检查鼠标是否在暂停区域内"""
@@ -33,16 +57,16 @@ def check_pause_region():
     # 检查是否在暂停区域内
     if px <= x <= px + pw and py <= y <= py + ph:
         if not is_paused:
-            print("⚠️ 鼠标进入暂停区域 - 移动已暂停")
+            print("⚠️ 鼠标进入暂停区域 - 活动已暂停")
             is_paused = True
     else:
         if is_paused:
-            print("✅ 鼠标离开暂停区域 - 移动已恢复")
+            print("✅ 鼠标离开暂停区域 - 活动已恢复")
         is_paused = False
     return is_paused
 
 def keyboard_listener():
-    """键盘监听线程（按ESC键退出程序）"""
+    """键盘监听线程"""
     global stop_program
     print("按ESC键可随时退出程序...")
     while not stop_program:
@@ -52,81 +76,57 @@ def keyboard_listener():
             break
         time.sleep(0.1)
 
+def activity_scheduler():
+    """活动调度程序"""
+    last_mouse_time = 0
+    last_key_time = 0
+    
+    while not stop_program:
+        current_time = time.time()
+        
+        # 检查暂停区域
+        if check_pause_region():
+            time.sleep(1)
+            continue
+            
+        # 执行鼠标移动
+        if current_time - last_mouse_time > MOVE_INTERVAL:
+            move_mouse()
+            last_mouse_time = current_time
+            
+        # 执行键盘活动
+        if current_time - last_key_time > KEY_INTERVAL:
+            simulate_keyboard()
+            last_key_time = current_time
+            
+        time.sleep(1)
+
 def main():
     global stop_program
-    print(f"启动防熄屏程序 | 移动间隔: {MOVE_INTERVAL}秒")
+    print(f"启动系统活跃保持程序 | 鼠标间隔: {MOVE_INTERVAL}秒 | 键盘间隔: {KEY_INTERVAL}秒")
     print(f"安全区域: 屏幕左上角 {PAUSE_REGION[2]}x{PAUSE_REGION[3]} 像素")
-    print("将鼠标移至安全区域可暂停移动\n")
+    print("将鼠标移至安全区域可暂停活动\n")
     
     # 启动键盘监听线程
     threading.Thread(target=keyboard_listener, daemon=True).start()
     
+    # 启动活动调度
+    threading.Thread(target=activity_scheduler, daemon=True).start()
+    
     try:
+        # 主线程保持运行
         while not stop_program:
-            # 检查暂停区域
-            if check_pause_region():
-                time.sleep(1)
-                continue
-                
-            # 执行鼠标移动
-            move_mouse()
-            
-            # 等待下次移动
-            time.sleep(MOVE_INTERVAL)
+            time.sleep(1)
             
     except pyautogui.FailSafeException:
         print("\n紧急停止：鼠标已移至屏幕左上角")
     except KeyboardInterrupt:
         print("\n程序已手动停止")
+    except Exception as e:
+        print(f"\n发生错误: {str(e)}")
     finally:
         stop_program = True
-        print("防熄屏程序已终止")
+        print("系统活跃保持程序已终止")
 
 if __name__ == "__main__":
     main()
-
-
-import ctypes
-import time
-import threading
-import keyboard
-
-# 全局控制变量
-is_running = True
-
-def simulate_activity():
-    """模拟键盘活动保持系统唤醒"""
-    while is_running:
-        # 发送虚拟按键（F24 - 通常未使用）
-        ctypes.windll.user32.keybd_event(0x87, 0, 0, 0)  # KEY DOWN
-        ctypes.windll.user32.keybd_event(0x87, 0, 2, 0)  # KEY UP
-        
-        # 记录活动时间
-        print(f"系统保持活跃 | 时间: {time.strftime('%H:%M:%S')}")
-        time.sleep(120)  # 每2分钟激活一次
-
-def exit_handler():
-    """监听退出键"""
-    global is_running
-    print("按ESC键退出程序...")
-    keyboard.wait('esc')
-    is_running = False
-    print("程序已安全退出")
-
-if __name__ == "__main__":
-    print("启动系统活跃保持程序...")
-    
-    # 创建并启动线程
-    activity_thread = threading.Thread(target=simulate_activity)
-    exit_thread = threading.Thread(target=exit_handler)
-    
-    activity_thread.daemon = True
-    activity_thread.start()
-    exit_thread.start()
-    
-    try:
-        while is_running:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        is_running = False
-        print("程序已手动停止")
