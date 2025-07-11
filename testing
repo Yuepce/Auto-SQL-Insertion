@@ -137,18 +137,24 @@ import pyautogui
 import time
 import keyboard
 
-# 全局变量，用于标记是否收到退出信号
 stop_flag = False
 
 def on_key_event(event):
     global stop_flag
-    if not stop_flag:
+    # 只响应按下事件，避免重复触发
+    if event.event_type == keyboard.KEY_DOWN and not stop_flag:
         stop_flag = True
         print("\n检测到按键输入 - 程序已终止")
 
 def keep_active():
+    global stop_flag
     print("程序已启动 - 每120秒自动按下Ctrl键")
     print("按任意键可随时退出程序...")
+
+    # 清空键盘事件缓冲区，避免启动时误触发退出
+    keyboard.clear_all_hotkeys()
+    while keyboard.get_typed_strings(keyboard.record(until='enter')):
+        pass  # 读取并丢弃所有已存在的按键事件
 
     # 注册键盘事件监听
     keyboard.hook(on_key_event)
@@ -171,6 +177,10 @@ def keep_active():
 
 if __name__ == "__main__":
     keep_active()
+
+
+
+  
 
 
 
