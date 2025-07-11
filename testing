@@ -133,40 +133,45 @@ if __name__ == "__main__":
 
 
 
-
 import pyautogui
 import time
 import keyboard
+
+# 全局变量，用于标记是否收到退出信号
+stop_flag = False
+
+def on_key_event(event):
+    global stop_flag
+    if not stop_flag:
+        stop_flag = True
+        print("\n检测到按键输入 - 程序已终止")
 
 def keep_active():
     print("程序已启动 - 每120秒自动按下Ctrl键")
     print("按任意键可随时退出程序...")
 
-    try:
-        while True:
-            # 检测是否有按键被按下（非阻塞）
-            if keyboard.is_pressed():
-                print("\n检测到按键输入 - 程序已终止")
-                break
+    # 注册键盘事件监听
+    keyboard.hook(on_key_event)
 
-            # 执行Ctrl键按下和释放
+    try:
+        while not stop_flag:
             pyautogui.press('ctrl')
             print(f"{time.strftime('%H:%M:%S')} - 已发送Ctrl键信号")
 
-            # 等待120秒，分段等待以便响应按键
+            # 120秒分段等待，期间检测退出信号
             for _ in range(120):
-                if keyboard.is_pressed():
-                    print("\n检测到按键输入 - 程序已终止")
-                    return
+                if stop_flag:
+                    break
                 time.sleep(1)
 
     except Exception as e:
-        print(f"发生错误: {str(e)}")
+        print(f"发生错误: {e}")
     finally:
         print("程序已安全退出")
 
 if __name__ == "__main__":
     keep_active()
+
 
 
 
