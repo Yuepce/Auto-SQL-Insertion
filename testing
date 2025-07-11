@@ -84,3 +84,49 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+import ctypes
+import time
+import threading
+import keyboard
+
+# 全局控制变量
+is_running = True
+
+def simulate_activity():
+    """模拟键盘活动保持系统唤醒"""
+    while is_running:
+        # 发送虚拟按键（F24 - 通常未使用）
+        ctypes.windll.user32.keybd_event(0x87, 0, 0, 0)  # KEY DOWN
+        ctypes.windll.user32.keybd_event(0x87, 0, 2, 0)  # KEY UP
+        
+        # 记录活动时间
+        print(f"系统保持活跃 | 时间: {time.strftime('%H:%M:%S')}")
+        time.sleep(120)  # 每2分钟激活一次
+
+def exit_handler():
+    """监听退出键"""
+    global is_running
+    print("按ESC键退出程序...")
+    keyboard.wait('esc')
+    is_running = False
+    print("程序已安全退出")
+
+if __name__ == "__main__":
+    print("启动系统活跃保持程序...")
+    
+    # 创建并启动线程
+    activity_thread = threading.Thread(target=simulate_activity)
+    exit_thread = threading.Thread(target=exit_handler)
+    
+    activity_thread.daemon = True
+    activity_thread.start()
+    exit_thread.start()
+    
+    try:
+        while is_running:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        is_running = False
+        print("程序已手动停止")
