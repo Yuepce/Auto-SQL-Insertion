@@ -1,28 +1,86 @@
-import ctypes
+import pyautogui
 import time
-from IPython.display import clear_output
+import threading
+import keyboard
 
-# 防止系统进入空闲状态的结构体
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_ = [('cbSize', ctypes.c_uint), ('dwTime', ctypes.c_uint)]
+# 安全设置
+pyautogui.FAILSAFE = True  # 启用安全特性（鼠标移到屏幕左上角可紧急停止）
+PAUSE_REGION = (0, 0, 100, 100)  # 暂停区域（左上角100x100像素区域）
+MOVE_INTERVAL = 30  # 鼠标移动间隔（秒）
+MOVE_DISTANCE = 10  # 鼠标移动距离（像素）
 
-# 调用 Windows API 设置系统状态为活跃
-def prevent_sleep():
-    ctypes.windll.kernel32.SetThreadExecutionState(0x80000002)
+# 状态跟踪
+is_paused = False
+stop_program = False
 
-# 显示运行状态（防止 Jupyter kernel 被 kill）
-run_minutes = 120
-interval = 30  # 每30秒刷新/激活一次
-print(f"🟢 开始防掉线（防Teams离开、系统锁屏）。预计持续运行 {run_minutes} 分钟，每 {interval} 秒刷新一次。")
+def move_mouse():
+    """安全地移动鼠标位置"""
+    current_x, current_y = pyautogui.position()
+    
+    # 在当前位置附近小幅度移动
+    pyautogui.moveRel(MOVE_DISTANCE, 0, duration=0.25)
+    pyautogui.moveRel(-MOVE_DISTANCE, 0, duration=0.25)
+    
+    # 记录日志（可选）
+    print(f"鼠标微动保持活跃 | 位置: ({current_x}, {current_y}) | 时间: {time.strftime('%H:%M:%S')}")
 
-try:
-    for i in range(int(run_minutes * 60 / interval)):
-        prevent_sleep()
-        clear_output(wait=True)
-        print(f"✅ 第 {i+1} 次激活系统，已运行 {((i+1)*interval)//60} 分钟")
-        time.sleep(interval)
+def check_pause_region():
+    """检查鼠标是否在暂停区域内"""
+    global is_paused
+    x, y = pyautogui.position()
+    px, py, pw, ph = PAUSE_REGION
+    
+    # 检查是否在暂停区域内
+    if px <= x <= px + pw and py <= y <= py + ph:
+        if not is_paused:
+            print("⚠️ 鼠标进入暂停区域 - 移动已暂停")
+            is_paused = True
+    else:
+        if is_paused:
+            print("✅ 鼠标离开暂停区域 - 移动已恢复")
+        is_paused = False
+    return is_paused
 
-    print("🟢 防掉线任务完成")
+def keyboard_listener():
+    """键盘监听线程（按ESC键退出程序）"""
+    global stop_program
+    print("按ESC键可随时退出程序...")
+    while not stop_program:
+        if keyboard.is_pressed('esc'):
+            stop_program = True
+            print("\n程序已安全退出")
+            break
+        time.sleep(0.1)
 
-except KeyboardInterrupt:
-    print("⛔ 已手动终止防掉线脚本")
+def main():
+    global stop_program
+    print(f"启动防熄屏程序 | 移动间隔: {MOVE_INTERVAL}秒")
+    print(f"安全区域: 屏幕左上角 {PAUSE_REGION[2]}x{PAUSE_REGION[3]} 像素")
+    print("将鼠标移至安全区域可暂停移动\n")
+    
+    # 启动键盘监听线程
+    threading.Thread(target=keyboard_listener, daemon=True).start()
+    
+    try:
+        while not stop_program:
+            # 检查暂停区域
+            if check_pause_region():
+                time.sleep(1)
+                continue
+                
+            # 执行鼠标移动
+            move_mouse()
+            
+            # 等待下次移动
+            time.sleep(MOVE_INTERVAL)
+            
+    except pyautogui.FailSafeException:
+        print("\n紧急停止：鼠标已移至屏幕左上角")
+    except KeyboardInterrupt:
+        print("\n程序已手动停止")
+    finally:
+        stop_program = True
+        print("防熄屏程序已终止")
+
+if __name__ == "__main__":
+    main()
