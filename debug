@@ -1,0 +1,13 @@
+程序已启动 - 每120秒自动按下Ctrl键
+按任意键可随时退出程序...
+Traceback (most recent call last):
+  File "c:\Users\h0a2\Desktop\test.py", line 44, in <module>
+    keep_active()
+    ~~~~~~~~~~~^^
+  File "c:\Users\h0a2\Desktop\test.py", line 20, in keep_active
+    keyboard.clear_all_hotkeys()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\h0a2\AppData\Local\Programs\Python\Python313\Lib\site-packages\keyboard\__init__.py", line 760, in unhook_all_hotkeys
+    _listener.blocking_hotkeys.clear()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_KeyboardListener' object has no attribute 'blocking_hotkeys'
