@@ -180,6 +180,48 @@ if __name__ == "__main__":
 
 
 
+
+
+import pyautogui
+import time
+import keyboard
+
+def keep_active():
+    print("程序已启动 - 每120秒自动按下Ctrl键")
+    print("按任意键可随时退出程序...")
+    
+    try:
+        last_press_time = time.time()
+        
+        while True:
+            # 非阻塞检测按键输入
+            if keyboard.is_pressed('any'):  # 检测任意按键
+                print("\n检测到按键输入 - 程序已终止")
+                break
+            
+            current_time = time.time()
+            # 检查是否到达120秒间隔
+            if current_time - last_press_time >= 120:
+                # 发送Ctrl键信号
+                pyautogui.keyDown('ctrl')
+                time.sleep(0.05)  # 短暂按下保持
+                pyautogui.keyUp('ctrl')
+                
+                print(f"{time.strftime('%H:%M:%S')} - 已发送Ctrl键信号")
+                last_press_time = current_time
+            
+            # 短暂睡眠减少CPU占用
+            time.sleep(0.1)
+                
+    except Exception as e:
+        print(f"发生错误: {str(e)}")
+    finally:
+        print("程序已安全退出")
+
+if __name__ == "__main__":
+    keep_active()
+
+
   
 
 
