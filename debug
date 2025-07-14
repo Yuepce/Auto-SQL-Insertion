@@ -1,13 +1,48 @@
-程序已启动 - 每120秒自动按下Ctrl键
-按任意键可随时退出程序...
-Traceback (most recent call last):
-  File "c:\Users\h0a2\Desktop\test.py", line 44, in <module>
+import pyautogui
+import time
+import threading
+
+# 全局退出标志
+exit_flag = False
+
+def key_listener():
+    """监听按键事件的线程函数"""
+    global exit_flag
+    try:
+        # 使用input()阻塞等待用户输入
+        input("\n按Enter键可随时退出程序...")  # 添加换行使提示更清晰
+        exit_flag = True
+        print("检测到按键输入 - 程序终止中...")
+    except:
+        pass  # 防止在程序退出时出现异常
+
+def keep_active():
+    global exit_flag
+    print("程序已启动 - 每120秒自动按下Ctrl键")
+    
+    # 启动按键监听线程
+    listener_thread = threading.Thread(target=key_listener, daemon=True)
+    listener_thread.start()
+    
+    try:
+        while not exit_flag:
+            # 发送Ctrl键信号 (更可靠的发送方式)
+            pyautogui.keyDown('ctrl')
+            time.sleep(0.05)  # 短暂按下保持
+            pyautogui.keyUp('ctrl')
+            
+            print(f"{time.strftime('%H:%M:%S')} - 已发送Ctrl键信号")
+            
+            # 等待120秒，每0.5秒检查一次退出标志
+            for _ in range(240):  # 120秒 ÷ 0.5秒 = 240次
+                if exit_flag:
+                    break
+                time.sleep(0.5)
+                
+    except Exception as e:
+        print(f"发生错误: {str(e)}")
+    finally:
+        print("程序已安全退出")
+
+if __name__ == "__main__":
     keep_active()
-    ~~~~~~~~~~~^^
-  File "c:\Users\h0a2\Desktop\test.py", line 20, in keep_active
-    keyboard.clear_all_hotkeys()
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\h0a2\AppData\Local\Programs\Python\Python313\Lib\site-packages\keyboard\__init__.py", line 760, in unhook_all_hotkeys
-    _listener.blocking_hotkeys.clear()
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: '_KeyboardListener' object has no attribute 'blocking_hotkeys'
