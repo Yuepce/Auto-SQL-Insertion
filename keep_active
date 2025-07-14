@@ -2,6 +2,9 @@ import pyautogui
 import time
 import threading
 
+# 禁用 PyAutoGUI 的故障保护机制
+pyautogui.FAILSAFE = False
+
 # 全局退出标志
 exit_flag = False
 
@@ -19,6 +22,7 @@ def key_listener():
 def keep_active():
     global exit_flag
     print("程序已启动 - 每120秒自动按下Ctrl键")
+    print("提示: 请避免将鼠标长时间停留在屏幕四角，以防止触发安全机制")
     
     # 启动按键监听线程
     listener_thread = threading.Thread(target=key_listener, daemon=True)
@@ -26,12 +30,18 @@ def keep_active():
     
     try:
         while not exit_flag:
-            # 发送Ctrl键信号 (更可靠的发送方式)
-            pyautogui.keyDown('ctrl')
-            time.sleep(0.05)  # 短暂按下保持
-            pyautogui.keyUp('ctrl')
-            
-            print(f"{time.strftime('%H:%M:%S')} - 已发送Ctrl键信号")
+            try:
+                # 发送Ctrl键信号 (更可靠的发送方式)
+                pyautogui.keyDown('ctrl')
+                time.sleep(0.05)  # 短暂按下保持
+                pyautogui.keyUp('ctrl')
+                
+                print(f"{time.strftime('%H:%M:%S')} - 已发送Ctrl键信号")
+                
+            except pyautogui.FailSafeException:
+                # 专门捕获并处理安全异常
+                print(f"{time.strftime('%H:%M:%S')} - 安全机制触发: 鼠标位于屏幕角落")
+                print("提示: 请将鼠标移开屏幕四角位置")
             
             # 等待120秒，每0.5秒检查一次退出标志
             for _ in range(240):  # 120秒 ÷ 0.5秒 = 240次
@@ -40,7 +50,7 @@ def keep_active():
                 time.sleep(0.5)
                 
     except Exception as e:
-        print(f"发生错误: {str(e)}")
+        print(f"发生未预期错误: {str(e)}")
     finally:
         print("程序已安全退出")
 
