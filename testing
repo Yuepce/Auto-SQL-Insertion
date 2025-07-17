@@ -222,6 +222,54 @@ if __name__ == "__main__":
     keep_active()
 
 
+
+
+
+
+
+WITH valid_balances AS (
+  SELECT *
+  FROM empf_ods.tb_account_balance bal
+  WHERE
+    bal.acct_type NOT IN ('RESERVE', 'FORFEITURE')
+    AND bal.sub_acct_type NOT IN ('RESERVE', 'FORFEITURE')
+    AND bal.record_last_updated_by <> 'INFORMATICA_DEL'
+    AND bal.scheme_cd = 'RB'
+)
+SELECT
+  pri.scheme_cd AS scheme_code,
+  pri.fund_cd AS inv_fund,
+  pri.efctv_date AS unit_price_dealing_date,
+  SUM(bal.unit_count) AS total_unit,
+  pri.bid_price_cnt AS unit_price,
+  SUM(bal.unit_count * pri.bid_price_cnt) AS net_asset_value
+FROM empf_ods.tb_fund_price pri
+JOIN (
+  SELECT *
+  FROM (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        PARTITION BY sub_acct_type, fund_cd, mbr_acct_cd, pri_date
+        ORDER BY eff_date DESC
+      ) AS rn
+    FROM (
+      SELECT b.*, p.efctv_date AS pri_date
+      FROM valid_balances b
+      JOIN empf_ods.tb_fund_price p ON b.fund_cd = p.fund_cd AND b.eff_date <= p.efctv_date
+      WHERE p.scheme_cd = 'RB' AND p.delete_flag = 'N'
+    ) t
+  ) x
+  WHERE rn = 1
+) bal ON pri.fund_cd = bal.fund_cd AND pri.efctv_date = bal.pri_date
+WHERE pri.efctv_date BETWEEN '2025-04-07' AND '2025-04-13'
+GROUP BY
+  pri.scheme_cd,
+  pri.fund_cd,
+  pri.efctv_date,
+  pri.bid_price_cnt
+ORDER BY
+  pri.fund_cd,
+  pri.efctv_date DESC;
   
 
 
