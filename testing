@@ -1,232 +1,3 @@
-import pyautogui
-import time
-import threading
-import keyboard
-import random
-import ctypes
-
-# 安全设置
-pyautogui.FAILSAFE = True  # 启用安全特性
-PAUSE_REGION = (0, 0, 100, 100)  # 暂停区域
-MOVE_INTERVAL = 60  # 主活动间隔（秒）
-KEY_INTERVAL = 30   # 键盘活动间隔（秒）
-
-# 状态跟踪
-is_paused = False
-stop_program = False
-
-def move_mouse():
-    """更有效的鼠标移动方法"""
-    current_x, current_y = pyautogui.position()
-    
-    # 在屏幕不同区域之间移动（模拟真实活动）
-    width, height = pyautogui.size()
-    
-    # 随机选择目标位置
-    target_x = random.randint(0, width)
-    target_y = random.randint(0, height)
-    
-    # 缓慢移动到目标位置
-    pyautogui.moveTo(target_x, target_y, duration=1.5)
-    
-    # 随机点击（约30%的概率）
-    if random.random() < 0.3:
-        pyautogui.click()
-    
-    # 记录日志
-    print(f"鼠标移动 | 位置: ({current_x}, {current_y}) → ({target_x}, {target_y}) | 时间: {time.strftime('%H:%M:%S')}")
-
-def simulate_keyboard():
-    """模拟键盘活动"""
-    # 使用虚拟键码（F13-F24通常未使用）
-    vk_code = 0x7C  # F13键
-    
-    # 发送按键按下和释放事件
-    ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0)  # 按下
-    time.sleep(0.05)
-    ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0)  # 释放
-    
-    print(f"键盘活动 | 模拟按键 | 时间: {time.strftime('%H:%M:%S')}")
-
-def check_pause_region():
-    """检查鼠标是否在暂停区域内"""
-    global is_paused
-    x, y = pyautogui.position()
-    px, py, pw, ph = PAUSE_REGION
-    
-    # 检查是否在暂停区域内
-    if px <= x <= px + pw and py <= y <= py + ph:
-        if not is_paused:
-            print("⚠️ 鼠标进入暂停区域 - 活动已暂停")
-            is_paused = True
-    else:
-        if is_paused:
-            print("✅ 鼠标离开暂停区域 - 活动已恢复")
-        is_paused = False
-    return is_paused
-
-def keyboard_listener():
-    """键盘监听线程"""
-    global stop_program
-    print("按ESC键可随时退出程序...")
-    while not stop_program:
-        if keyboard.is_pressed('esc'):
-            stop_program = True
-            print("\n程序已安全退出")
-            break
-        time.sleep(0.1)
-
-def activity_scheduler():
-    """活动调度程序"""
-    last_mouse_time = 0
-    last_key_time = 0
-    
-    while not stop_program:
-        current_time = time.time()
-        
-        # 检查暂停区域
-        if check_pause_region():
-            time.sleep(1)
-            continue
-            
-        # 执行鼠标移动
-        if current_time - last_mouse_time > MOVE_INTERVAL:
-            move_mouse()
-            last_mouse_time = current_time
-            
-        # 执行键盘活动
-        if current_time - last_key_time > KEY_INTERVAL:
-            simulate_keyboard()
-            last_key_time = current_time
-            
-        time.sleep(1)
-
-def main():
-    global stop_program
-    print(f"启动系统活跃保持程序 | 鼠标间隔: {MOVE_INTERVAL}秒 | 键盘间隔: {KEY_INTERVAL}秒")
-    print(f"安全区域: 屏幕左上角 {PAUSE_REGION[2]}x{PAUSE_REGION[3]} 像素")
-    print("将鼠标移至安全区域可暂停活动\n")
-    
-    # 启动键盘监听线程
-    threading.Thread(target=keyboard_listener, daemon=True).start()
-    
-    # 启动活动调度
-    threading.Thread(target=activity_scheduler, daemon=True).start()
-    
-    try:
-        # 主线程保持运行
-        while not stop_program:
-            time.sleep(1)
-            
-    except pyautogui.FailSafeException:
-        print("\n紧急停止：鼠标已移至屏幕左上角")
-    except KeyboardInterrupt:
-        print("\n程序已手动停止")
-    except Exception as e:
-        print(f"\n发生错误: {str(e)}")
-    finally:
-        stop_program = True
-        print("系统活跃保持程序已终止")
-
-if __name__ == "__main__":
-    main()
-
-
-
-import pyautogui
-import time
-import keyboard
-
-stop_flag = False
-
-def on_key_event(event):
-    global stop_flag
-    # 只响应按下事件，避免重复触发
-    if event.event_type == keyboard.KEY_DOWN and not stop_flag:
-        stop_flag = True
-        print("\n检测到按键输入 - 程序已终止")
-
-def keep_active():
-    global stop_flag
-    print("程序已启动 - 每120秒自动按下Ctrl键")
-    print("按任意键可随时退出程序...")
-
-    # 清空键盘事件缓冲区，避免启动时误触发退出
-    keyboard.clear_all_hotkeys()
-    while keyboard.get_typed_strings(keyboard.record(until='enter')):
-        pass  # 读取并丢弃所有已存在的按键事件
-
-    # 注册键盘事件监听
-    keyboard.hook(on_key_event)
-
-    try:
-        while not stop_flag:
-            pyautogui.press('ctrl')
-            print(f"{time.strftime('%H:%M:%S')} - 已发送Ctrl键信号")
-
-            # 120秒分段等待，期间检测退出信号
-            for _ in range(120):
-                if stop_flag:
-                    break
-                time.sleep(1)
-
-    except Exception as e:
-        print(f"发生错误: {e}")
-    finally:
-        print("程序已安全退出")
-
-if __name__ == "__main__":
-    keep_active()
-
-
-
-
-
-import pyautogui
-import time
-import keyboard
-
-def keep_active():
-    print("程序已启动 - 每120秒自动按下Ctrl键")
-    print("按任意键可随时退出程序...")
-    
-    try:
-        last_press_time = time.time()
-        
-        while True:
-            # 非阻塞检测按键输入
-            if keyboard.is_pressed('any'):  # 检测任意按键
-                print("\n检测到按键输入 - 程序已终止")
-                break
-            
-            current_time = time.time()
-            # 检查是否到达120秒间隔
-            if current_time - last_press_time >= 120:
-                # 发送Ctrl键信号
-                pyautogui.keyDown('ctrl')
-                time.sleep(0.05)  # 短暂按下保持
-                pyautogui.keyUp('ctrl')
-                
-                print(f"{time.strftime('%H:%M:%S')} - 已发送Ctrl键信号")
-                last_press_time = current_time
-            
-            # 短暂睡眠减少CPU占用
-            time.sleep(0.1)
-                
-    except Exception as e:
-        print(f"发生错误: {str(e)}")
-    finally:
-        print("程序已安全退出")
-
-if __name__ == "__main__":
-    keep_active()
-
-
-
-
-
-
-
 WITH valid_balances AS (
   SELECT *
   FROM empf_ods.tb_account_balance bal
@@ -270,7 +41,64 @@ GROUP BY
 ORDER BY
   pri.fund_cd,
   pri.efctv_date DESC;
-  
+
+
+-- 🔍 调试参数：
+-- 替换为你关注的 NAV 报表日期 & 基金代码
+WITH nav_date_target AS (
+  SELECT 
+    DATE '2025-04-07' AS nav_date,   -- 👈 Replace with your target NAV date
+    'CRCPF' AS target_fund           -- 👈 Replace with your fund code
+),
+
+-- 1️⃣ 找出该基金在该 NAV 日期下的有效基金价格记录（必须存在）
+valid_fund_price AS (
+  SELECT *
+  FROM tb_fund_price f
+  JOIN nav_date_target t
+    ON f.efctv_date = t.nav_date AND f.fund_cd = t.target_fund
+  WHERE f.scheme_cd = 'RB'
+    AND f.delete_flag = 'N'
+),
+
+-- 2️⃣ 找出所有符合该 NAV 日期条件的账户余额记录（用于 unit 汇总）
+valid_account_balance AS (
+  SELECT 
+    b.*,
+    ROW_NUMBER() OVER (
+      PARTITION BY b.sub_acct_type, b.fund_cd, b.mbr_acct_cd
+      ORDER BY b.eff_date DESC
+    ) AS rn
+  FROM tb_account_balance b
+  JOIN nav_date_target t
+    ON b.fund_cd = t.target_fund
+  JOIN valid_fund_price p
+    ON b.fund_cd = p.fund_cd
+  WHERE b.scheme_cd = 'RB'
+    AND b.acct_type NOT IN ('RESERVE', 'FORFEITURE')
+    AND b.sub_acct_type NOT IN ('RESERVE', 'FORFEITURE')
+    AND b.record_last_updated_by <> 'INFORMATICA_DEL'
+    AND b.eff_date <= p.efctv_date
+)
+
+-- 3️⃣ 最终输出所有被计入 total_unit 的记录
+SELECT 
+  b.mbr_acct_cd,
+  b.fund_cd,
+  b.eff_date,
+  b.unit_count,
+  b.acct_type,
+  b.sub_acct_type,
+  b.delete_flag,
+  b.record_last_updated_by,
+  p.efctv_date AS nav_date,
+  p.bid_price_cnt AS unit_price,
+  b.unit_count * p.bid_price_cnt AS partial_nav
+FROM valid_account_balance b
+JOIN valid_fund_price p
+  ON b.fund_cd = p.fund_cd
+WHERE b.rn = 1
+ORDER BY b.eff_date DESC;
 
 
 
