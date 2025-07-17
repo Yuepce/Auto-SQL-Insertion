@@ -104,3 +104,70 @@ ORDER BY b.eff_date DESC;
 
 
 
+-- 1. 预过滤合法账户记录
+WITH valid_balances AS (
+  SELECT *
+  FROM empf_ods.tb_account_balance bal
+  WHERE
+    bal.acct_type NOT IN ('RESERVE', 'FORFEITURE')
+    AND bal.sub_acct_type NOT IN ('RESERVE', 'FORFEITURE')
+    AND bal.record_last_updated_by <> 'INFORMATICA_DEL'
+    AND bal.scheme_cd = 'RB'
+    AND bal.delete_flag = 'N'
+),
+
+-- 2. 生成所有 NAV 日与合规账户记录的交叉组合（并限制 eff_date ≤ efctv_date）
+balance_with_nav_date AS (
+  SELECT
+    b.*,
+    p.efctv_date AS pri_date,
+    p.bid_price_cnt
+  FROM valid_balances b
+  JOIN empf_ods.tb_fund_price p
+    ON b.fund_cd = p.fund_cd
+   AND b.eff_date <= p.efctv_date
+  WHERE p.scheme_cd = 'RB'
+    AND p.delete_flag = 'N'
+),
+
+-- 3. 每个 NAV 日 & 基金 & 账户组合选出最接近的一条记录（eff_date 最大）
+latest_valid_balances AS (
+  SELECT *
+  FROM (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        PARTITION BY sub_acct_type, fund_cd, mbr_acct_cd, pri_date
+        ORDER BY eff_date DESC
+      ) AS rn
+    FROM balance_with_nav_date
+  ) ranked
+  WHERE rn = 1
+)
+
+-- 4. 汇总生成 NAV 报表
+SELECT
+  p.scheme_cd AS scheme_code,
+  p.fund_cd AS inv_fund,
+  p.efctv_date AS unit_price_dealing_date,
+  SUM(b.unit_count) AS total_unit,
+  p.bid_price_cnt AS unit_price,
+  SUM(b.unit_count * p.bid_price_cnt) AS net_asset_value
+FROM empf_ods.tb_fund_price p
+JOIN latest_valid_balances b
+  ON p.fund_cd = b.fund_cd
+ AND p.efctv_date = b.pri_date
+WHERE p.scheme_cd = 'RB'
+  AND p.delete_flag = 'N'
+  AND p.efctv_date BETWEEN DATE '2025-04-07' AND DATE '2025-04-13'
+GROUP BY
+  p.scheme_cd,
+  p.fund_cd,
+  p.efctv_date,
+  p.bid_price_cnt
+ORDER BY
+  p.fund_cd,
+  p.efctv_date DESC;
+
+
+
+
