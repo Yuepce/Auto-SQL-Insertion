@@ -178,14 +178,14 @@ Sub HighlightFRSFilteredNAVRecords()
     Dim ws As Worksheet
     Set ws = ActiveSheet
 
-    ' --- 设置输入参数 ---
+    ' --- Set input parameters ---
     Dim rng As Range
-    Set rng = ws.Range("A37:K51") ' 数据区域（不含列名）
+    Set rng = ws.Range("A37:K51") ' Data range (no header)
 
     Dim efctv_date As Date
-    efctv_date = DateValue("2026-04-16") ' 设置 efctv_date
+    efctv_date = DateValue("2026-04-16") ' Target NAV date
 
-    ' --- 获取列号定义 ---
+    ' --- Column index definitions ---
     Const COL_DELETE_FLAG = 1
     Const COL_SCHEME_CD = 2
     Const COL_EMPLR_ACCT_CD = 3
@@ -198,16 +198,19 @@ Sub HighlightFRSFilteredNAVRecords()
     Const COL_UNIT_COUNT = 10
     Const COL_UPDATED_BY = 11
 
-    ' --- 清除所有原有填色 ---
+    ' --- Clear any existing highlights ---
     rng.Interior.Pattern = xlNone
 
-    Dim i As Long, lastRow As Long
-    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-    Dim key As String
+    Dim i As Long
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+    Dim key As Variant
 
-    ' --- 第一次遍历：构建最新 eff_date（≤ efctv_date） 的分组记录 ---
+    ' --- Step 1: Build group-by dictionary for the latest eligible eff_date ≤ efctv_date ---
     For i = 1 To rng.Rows.Count
-        Dim rowEffDate As Variant: rowEffDate = rng.Cells(i, COL_EFF_DATE).Value
+        Dim rowEffDate As Variant
+        rowEffDate = rng.Cells(i, COL_EFF_DATE).Value
+
         If IsDate(rowEffDate) Then
             If CDate(rowEffDate) <= efctv_date Then
                 Dim acct_type As String: acct_type = Trim(UCase(rng.Cells(i, COL_ACCT_TYPE).Value))
@@ -215,16 +218,16 @@ Sub HighlightFRSFilteredNAVRecords()
                 Dim updated_by As String: updated_by = Trim(UCase(rng.Cells(i, COL_UPDATED_BY).Value))
                 Dim delete_flag As String: delete_flag = Trim(UCase(rng.Cells(i, COL_DELETE_FLAG).Value))
 
-                ' 排除不符合的记录
+                ' Exclude invalid records
                 If acct_type <> "RESERVE" And acct_type <> "FORFEITURE" _
                 And sub_acct_type <> "RESERVE" And sub_acct_type <> "FORFEITURE" _
                 And updated_by <> "INFORMATICA_DEL" _
                 And delete_flag = "N" Then
 
-                    ' 构建分组 key
+                    ' Build grouping key
                     key = sub_acct_type & "|" & rng.Cells(i, COL_FUND_CD).Value & "|" & rng.Cells(i, COL_MBR_ACCT_CD).Value
 
-                    ' 如果该组没记录或更晚的 eff_date，更新该组
+                    ' Keep only the latest eff_date per group
                     If Not dict.exists(key) Then
                         dict.Add key, i
                     Else
@@ -238,13 +241,12 @@ Sub HighlightFRSFilteredNAVRecords()
         End If
     Next i
 
-    ' --- 第二次遍历：高亮选中行 ---
+    ' --- Step 2: Highlight retained rows ---
     Dim r As Long
     For Each key In dict.Keys
         r = dict(key)
-        rng.Rows(r).Interior.Color = RGB(198, 239, 206) ' 浅绿色
+        rng.Rows(r).Interior.Color = RGB(198, 239, 206) ' Light green
     Next key
 
-    MsgBox "筛选并高亮完成！共高亮 " & dict.Count & " 条记录。", vbInformation
+    MsgBox "Highlighting complete. " & dict.Count & " rows selected.", vbInformation
 End Sub
-
