@@ -250,3 +250,93 @@ Sub HighlightFRSFilteredNAVRecords()
 
     MsgBox "Highlighting complete. " & dict.Count & " rows selected.", vbInformation
 End Sub
+
+
+
+###############update
+
+Sub HighlightFRSFilteredNAVRecordsWithGroupingAndSum()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+
+    ' Set your data range (no header row)
+    Dim rng As Range
+    Set rng = ws.Range("A37:K51")
+
+    ' Define NAV effective date (as of tb_fund_price.efctv_date)
+    Dim efctv_date As Date
+    efctv_date = DateValue("2026-04-16")
+
+    ' Column indexes (adjust if range structure changes)
+    Const COL_DELETE_FLAG = 1
+    Const COL_SCHEME_CD = 2
+    Const COL_EMPLR_ACCT_CD = 3
+    Const COL_PAYROLL_GROUP_ID = 4
+    Const COL_MBR_ACCT_CD = 5
+    Const COL_ACCT_TYPE = 6
+    Const COL_SUB_ACCT_TYPE = 7
+    Const COL_EFF_DATE = 8
+    Const COL_FUND_CD = 9
+    Const COL_UNIT_COUNT = 10
+    Const COL_UPDATED_BY = 11
+
+    ' Clear all existing highlights
+    rng.Interior.Pattern = xlNone
+
+    Dim i As Long
+    Dim key As Variant
+    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
+
+    ' First pass: group by (sub_acct_type, fund_cd, mbr_acct_cd) and keep the latest eff_date row
+    For i = 1 To rng.Rows.Count
+        Dim acct_type As String: acct_type = Trim(UCase(rng.Cells(i, COL_ACCT_TYPE).Value))
+        Dim sub_acct_type As String: sub_acct_type = Trim(UCase(rng.Cells(i, COL_SUB_ACCT_TYPE).Value))
+        Dim fund_cd As String: fund_cd = Trim(rng.Cells(i, COL_FUND_CD).Value)
+        Dim mbr_acct_cd As String: mbr_acct_cd = Trim(rng.Cells(i, COL_MBR_ACCT_CD).Value)
+        Dim eff_date As Variant: eff_date = rng.Cells(i, COL_EFF_DATE).Value
+        Dim delete_flag As String: delete_flag = Trim(UCase(rng.Cells(i, COL_DELETE_FLAG).Value))
+        Dim updated_by As String: updated_by = Trim(UCase(rng.Cells(i, COL_UPDATED_BY).Value))
+
+        If IsDate(eff_date) Then
+            If CDate(eff_date) <= efctv_date _
+               And acct_type <> "RESERVE" _
+               And acct_type <> "FORFEITURE" _
+               And sub_acct_type <> "RESERVE" _
+               And sub_acct_type <> "FORFEITURE" _
+               And updated_by <> "INFORMATICA_DEL" _
+               And delete_flag = "N" Then
+
+                key = sub_acct_type & "|" & fund_cd & "|" & mbr_acct_cd
+
+                If Not dict.exists(key) Then
+                    dict.Add key, i
+                Else
+                    Dim prevRow As Long: prevRow = dict(key)
+                    If rng.Cells(i, COL_EFF_DATE).Value > rng.Cells(prevRow, COL_EFF_DATE).Value Then
+                        dict(key) = i
+                    End If
+                End If
+            End If
+        End If
+    Next i
+
+    ' Highlight retained rows and sum their unit_count
+    Dim r As Long, total_unit_count As Double
+    For Each key In dict.Keys
+        r = dict(key)
+        rng.Rows(r).Interior.Color = RGB(198, 239, 206) ' Light green
+        If IsNumeric(rng.Cells(r, COL_UNIT_COUNT).Value) Then
+            total_unit_count = total_unit_count + rng.Cells(r, COL_UNIT_COUNT).Value
+        End If
+    Next key
+
+    ' Output total unit count below the selected range in unit_count column
+    Dim outputCell As Range
+    Set outputCell = rng.Cells(rng.Rows.Count + 1, COL_UNIT_COUNT)
+    outputCell.Value = total_unit_count
+    outputCell.Font.Bold = True
+    outputCell.Interior.Color = RGB(255, 255, 153) ' Light yellow
+    outputCell.NumberFormat = "#,##0.00"
+
+    MsgBox "Filtering complete. " & dict.Count & " rows selected. Total unit count = " & total_unit_count, vbInformation
+End Sub
