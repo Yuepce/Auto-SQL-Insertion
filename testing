@@ -171,3 +171,80 @@ ORDER BY
 
 
 
+
+#########
+
+Sub HighlightFRSFilteredNAVRecords()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+
+    ' --- 设置输入参数 ---
+    Dim rng As Range
+    Set rng = ws.Range("A37:K51") ' 数据区域（不含列名）
+
+    Dim efctv_date As Date
+    efctv_date = DateValue("2026-04-16") ' 设置 efctv_date
+
+    ' --- 获取列号定义 ---
+    Const COL_DELETE_FLAG = 1
+    Const COL_SCHEME_CD = 2
+    Const COL_EMPLR_ACCT_CD = 3
+    Const COL_PAYROLL_GROUP_ID = 4
+    Const COL_MBR_ACCT_CD = 5
+    Const COL_ACCT_TYPE = 6
+    Const COL_SUB_ACCT_TYPE = 7
+    Const COL_EFF_DATE = 8
+    Const COL_FUND_CD = 9
+    Const COL_UNIT_COUNT = 10
+    Const COL_UPDATED_BY = 11
+
+    ' --- 清除所有原有填色 ---
+    rng.Interior.Pattern = xlNone
+
+    Dim i As Long, lastRow As Long
+    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
+    Dim key As String
+
+    ' --- 第一次遍历：构建最新 eff_date（≤ efctv_date） 的分组记录 ---
+    For i = 1 To rng.Rows.Count
+        Dim rowEffDate As Variant: rowEffDate = rng.Cells(i, COL_EFF_DATE).Value
+        If IsDate(rowEffDate) Then
+            If CDate(rowEffDate) <= efctv_date Then
+                Dim acct_type As String: acct_type = Trim(UCase(rng.Cells(i, COL_ACCT_TYPE).Value))
+                Dim sub_acct_type As String: sub_acct_type = Trim(UCase(rng.Cells(i, COL_SUB_ACCT_TYPE).Value))
+                Dim updated_by As String: updated_by = Trim(UCase(rng.Cells(i, COL_UPDATED_BY).Value))
+                Dim delete_flag As String: delete_flag = Trim(UCase(rng.Cells(i, COL_DELETE_FLAG).Value))
+
+                ' 排除不符合的记录
+                If acct_type <> "RESERVE" And acct_type <> "FORFEITURE" _
+                And sub_acct_type <> "RESERVE" And sub_acct_type <> "FORFEITURE" _
+                And updated_by <> "INFORMATICA_DEL" _
+                And delete_flag = "N" Then
+
+                    ' 构建分组 key
+                    key = sub_acct_type & "|" & rng.Cells(i, COL_FUND_CD).Value & "|" & rng.Cells(i, COL_MBR_ACCT_CD).Value
+
+                    ' 如果该组没记录或更晚的 eff_date，更新该组
+                    If Not dict.exists(key) Then
+                        dict.Add key, i
+                    Else
+                        Dim prevRow As Long: prevRow = dict(key)
+                        If rng.Cells(i, COL_EFF_DATE).Value > rng.Cells(prevRow, COL_EFF_DATE).Value Then
+                            dict(key) = i
+                        End If
+                    End If
+                End If
+            End If
+        End If
+    Next i
+
+    ' --- 第二次遍历：高亮选中行 ---
+    Dim r As Long
+    For Each key In dict.Keys
+        r = dict(key)
+        rng.Rows(r).Interior.Color = RGB(198, 239, 206) ' 浅绿色
+    Next key
+
+    MsgBox "筛选并高亮完成！共高亮 " & dict.Count & " 条记录。", vbInformation
+End Sub
+
