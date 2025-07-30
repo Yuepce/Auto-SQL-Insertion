@@ -1,4 +1,3 @@
-
 import os
 import re
 import unicodedata
@@ -14,6 +13,15 @@ def normalize_text(s: str) -> str:
     s = unicodedata.normalize("NFKC", str(s))
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s.strip()
+
+def add_bold_paragraph(doc_obj, label, content):
+    p = doc_obj.add_paragraph()
+    run = p.add_run(f"{label}:\n")
+    run.bold = True
+    run.font.size = Pt(11)
+    run.font.name = 'Arial'
+    run._element.rPr.rFonts.set(qn('w:eastAsia'), '微软雅黑')
+    p.add_run(content)
 
 def extract_and_generate_word(excel_path, sheet_name, case_suffixes, output_path, split_by_case=False):
     if not os.path.exists(excel_path):
@@ -50,16 +58,6 @@ def extract_and_generate_word(excel_path, sheet_name, case_suffixes, output_path
             doc.add_heading("Selected Test Case", level=0)
             doc.add_heading(case_id, level=1)
 
-            def add_bold_paragraph(doc_obj, label, content):
-                p = doc_obj.add_paragraph()
-                run = p.add_run(f"{label}:
-")
-                run.bold = True
-                run.font.size = Pt(11)
-                run.font.name = 'Arial'
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), '微软雅黑')
-                p.add_run(content)
-
             add_bold_paragraph(doc, "Description", desc)
             add_bold_paragraph(doc, "Test Condition", cond)
             add_bold_paragraph(doc, "Expected Result", exp)
@@ -79,17 +77,6 @@ def extract_and_generate_word(excel_path, sheet_name, case_suffixes, output_path
 
         for case_id, desc, cond, exp in all_docs:
             doc.add_heading(case_id, level=1)
-
-            def add_bold_paragraph(doc_obj, label, content):
-                p = doc_obj.add_paragraph()
-                run = p.add_run(f"{label}:
-")
-                run.bold = True
-                run.font.size = Pt(11)
-                run.font.name = 'Arial'
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), '微软雅黑')
-                p.add_run(content)
-
             add_bold_paragraph(doc, "Description", desc)
             add_bold_paragraph(doc, "Test Condition", cond)
             add_bold_paragraph(doc, "Expected Result", exp)
