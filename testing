@@ -1,342 +1,71 @@
-WITH valid_balances AS (
-  SELECT *
-  FROM empf_ods.tb_account_balance bal
-  WHERE
-    bal.acct_type NOT IN ('RESERVE', 'FORFEITURE')
-    AND bal.sub_acct_type NOT IN ('RESERVE', 'FORFEITURE')
-    AND bal.record_last_updated_by <> 'INFORMATICA_DEL'
-    AND bal.scheme_cd = 'RB'
-)
-SELECT
-  pri.scheme_cd AS scheme_code,
-  pri.fund_cd AS inv_fund,
-  pri.efctv_date AS unit_price_dealing_date,
-  SUM(bal.unit_count) AS total_unit,
-  pri.bid_price_cnt AS unit_price,
-  SUM(bal.unit_count * pri.bid_price_cnt) AS net_asset_value
-FROM empf_ods.tb_fund_price pri
-JOIN (
-  SELECT *
-  FROM (
-    SELECT *,
-      ROW_NUMBER() OVER (
-        PARTITION BY sub_acct_type, fund_cd, mbr_acct_cd, pri_date
-        ORDER BY eff_date DESC
-      ) AS rn
-    FROM (
-      SELECT b.*, p.efctv_date AS pri_date
-      FROM valid_balances b
-      JOIN empf_ods.tb_fund_price p ON b.fund_cd = p.fund_cd AND b.eff_date <= p.efctv_date
-      WHERE p.scheme_cd = 'RB' AND p.delete_flag = 'N'
-    ) t
-  ) x
-  WHERE rn = 1
-) bal ON pri.fund_cd = bal.fund_cd AND pri.efctv_date = bal.pri_date
-WHERE pri.efctv_date BETWEEN '2025-04-07' AND '2025-04-13'
-GROUP BY
-  pri.scheme_cd,
-  pri.fund_cd,
-  pri.efctv_date,
-  pri.bid_price_cnt
-ORDER BY
-  pri.fund_cd,
-  pri.efctv_date DESC;
+import os
+import re
+import unicodedata
+import pandas as pd
+from docx import Document
+from datetime import datetime
 
+def normalize_text(s: str) -> str:
+    if s is None:
+        return ""
+    s = unicodedata.normalize("NFKC", str(s))
+    s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
+    return s.strip()
 
--- 🔍 调试参数：
--- 替换为你关注的 NAV 报表日期 & 基金代码
-WITH nav_date_target AS (
-  SELECT 
-    DATE '2025-04-07' AS nav_date,   -- 👈 Replace with your target NAV date
-    'CRCPF' AS target_fund           -- 👈 Replace with your fund code
-),
+def extract_and_generate_word(excel_path, sheet_name, case_ids, output_path):
+    if not os.path.exists(excel_path):
+        raise FileNotFoundError(f"❌ Excel 文件路径不存在: {excel_path}")
 
--- 1️⃣ 找出该基金在该 NAV 日期下的有效基金价格记录（必须存在）
-valid_fund_price AS (
-  SELECT *
-  FROM tb_fund_price f
-  JOIN nav_date_target t
-    ON f.efctv_date = t.nav_date AND f.fund_cd = t.target_fund
-  WHERE f.scheme_cd = 'RB'
-    AND f.delete_flag = 'N'
-),
+    try:
+        df = pd.read_excel(excel_path, sheet_name=sheet_name, header=None, engine="openpyxl", dtype=str)
+    except Exception as e:
+        raise Exception(f"❌ 加载 sheet 出错: {e}")
 
--- 2️⃣ 找出所有符合该 NAV 日期条件的账户余额记录（用于 unit 汇总）
-valid_account_balance AS (
-  SELECT 
-    b.*,
-    ROW_NUMBER() OVER (
-      PARTITION BY b.sub_acct_type, b.fund_cd, b.mbr_acct_cd
-      ORDER BY b.eff_date DESC
-    ) AS rn
-  FROM tb_account_balance b
-  JOIN nav_date_target t
-    ON b.fund_cd = t.target_fund
-  JOIN valid_fund_price p
-    ON b.fund_cd = p.fund_cd
-  WHERE b.scheme_cd = 'RB'
-    AND b.acct_type NOT IN ('RESERVE', 'FORFEITURE')
-    AND b.sub_acct_type NOT IN ('RESERVE', 'FORFEITURE')
-    AND b.record_last_updated_by <> 'INFORMATICA_DEL'
-    AND b.eff_date <= p.efctv_date
-)
+    doc = Document()
+    doc.add_heading("Selected Test Cases Report", level=0)
 
--- 3️⃣ 最终输出所有被计入 total_unit 的记录
-SELECT 
-  b.mbr_acct_cd,
-  b.fund_cd,
-  b.eff_date,
-  b.unit_count,
-  b.acct_type,
-  b.sub_acct_type,
-  b.delete_flag,
-  b.record_last_updated_by,
-  p.efctv_date AS nav_date,
-  p.bid_price_cnt AS unit_price,
-  b.unit_count * p.bid_price_cnt AS partial_nav
-FROM valid_account_balance b
-JOIN valid_fund_price p
-  ON b.fund_cd = p.fund_cd
-WHERE b.rn = 1
-ORDER BY b.eff_date DESC;
+    col_id = df.columns[0]
+    col_desc = df.columns[3] if df.shape[1] > 3 else None
+    col_cond = df.columns[4] if df.shape[1] > 4 else None
+    col_exp = df.columns[5] if df.shape[1] > 5 else None
 
+    hits = 0
+    for case_id in case_ids:
+        normalized_case_id = normalize_text(case_id)
+        matched_rows = df[df[col_id].astype(str).apply(normalize_text) == normalized_case_id]
 
+        if matched_rows.empty:
+            print(f"⚠️ 未找到 Test Case ID: {case_id}")
+            continue
 
+        for _, row in matched_rows.iterrows():
+            doc.add_heading(case_id, level=1)
+            desc = normalize_text(row[col_desc]) if col_desc else ""
+            cond = normalize_text(row[col_cond]) if col_cond else ""
+            exp = normalize_text(row[col_exp]) if col_exp else ""
 
+            doc.add_paragraph(f"Description:\n{desc}")
+            doc.add_paragraph(f"Test Condition:\n{cond}")
+            doc.add_paragraph(f"Expected Result:\n{exp}")
+            doc.add_paragraph("")  # 空行分隔
+            hits += 1
 
--- 1. 预过滤合法账户记录
-WITH valid_balances AS (
-  SELECT *
-  FROM empf_ods.tb_account_balance bal
-  WHERE
-    bal.acct_type NOT IN ('RESERVE', 'FORFEITURE')
-    AND bal.sub_acct_type NOT IN ('RESERVE', 'FORFEITURE')
-    AND bal.record_last_updated_by <> 'INFORMATICA_DEL'
-    AND bal.scheme_cd = 'RB'
-    AND bal.delete_flag = 'N'
-),
+    if hits == 0:
+        print("❌ 没有匹配任何 Test Case ID，Word 文件不会生成")
+        return
 
--- 2. 生成所有 NAV 日与合规账户记录的交叉组合（并限制 eff_date ≤ efctv_date）
-balance_with_nav_date AS (
-  SELECT
-    b.*,
-    p.efctv_date AS pri_date,
-    p.bid_price_cnt
-  FROM valid_balances b
-  JOIN empf_ods.tb_fund_price p
-    ON b.fund_cd = p.fund_cd
-   AND b.eff_date <= p.efctv_date
-  WHERE p.scheme_cd = 'RB'
-    AND p.delete_flag = 'N'
-),
+    base, ext = os.path.splitext(output_path)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    final_path = f"{base}_{timestamp}{ext}"
+    doc.save(final_path)
+    print(f"✅ Word 文件已保存至: {final_path}")
+    return final_path
 
--- 3. 每个 NAV 日 & 基金 & 账户组合选出最接近的一条记录（eff_date 最大）
-latest_valid_balances AS (
-  SELECT *
-  FROM (
-    SELECT *,
-      ROW_NUMBER() OVER (
-        PARTITION BY sub_acct_type, fund_cd, mbr_acct_cd, pri_date
-        ORDER BY eff_date DESC
-      ) AS rn
-    FROM balance_with_nav_date
-  ) ranked
-  WHERE rn = 1
-)
+# ✅ 示例调用
+if __name__ == "__main__":
+    excel_path = r"C:\Users\h0a2\Desktop\Unit and Integration Test Case - FCRM Reporting_v0.1.xlsx"
+    sheet_name = "Test Cases_Batch2b"
+    case_ids = ["FCRM_Batch2b_02", "FCRM_Batch2b_07", "FCRM_Batch2b_10"]
+    output_path = r"C:\Users\h0a2\Desktop\Selected_Test_Cases.docx"
 
--- 4. 汇总生成 NAV 报表
-SELECT
-  p.scheme_cd AS scheme_code,
-  p.fund_cd AS inv_fund,
-  p.efctv_date AS unit_price_dealing_date,
-  SUM(b.unit_count) AS total_unit,
-  p.bid_price_cnt AS unit_price,
-  SUM(b.unit_count * p.bid_price_cnt) AS net_asset_value
-FROM empf_ods.tb_fund_price p
-JOIN latest_valid_balances b
-  ON p.fund_cd = b.fund_cd
- AND p.efctv_date = b.pri_date
-WHERE p.scheme_cd = 'RB'
-  AND p.delete_flag = 'N'
-  AND p.efctv_date BETWEEN DATE '2025-04-07' AND DATE '2025-04-13'
-GROUP BY
-  p.scheme_cd,
-  p.fund_cd,
-  p.efctv_date,
-  p.bid_price_cnt
-ORDER BY
-  p.fund_cd,
-  p.efctv_date DESC;
-
-
-
-
-
-#########
-
-Sub HighlightFRSFilteredNAVRecords()
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
-
-    ' --- Set input parameters ---
-    Dim rng As Range
-    Set rng = ws.Range("A37:K51") ' Data range (no header)
-
-    Dim efctv_date As Date
-    efctv_date = DateValue("2026-04-16") ' Target NAV date
-
-    ' --- Column index definitions ---
-    Const COL_DELETE_FLAG = 1
-    Const COL_SCHEME_CD = 2
-    Const COL_EMPLR_ACCT_CD = 3
-    Const COL_PAYROLL_GROUP_ID = 4
-    Const COL_MBR_ACCT_CD = 5
-    Const COL_ACCT_TYPE = 6
-    Const COL_SUB_ACCT_TYPE = 7
-    Const COL_EFF_DATE = 8
-    Const COL_FUND_CD = 9
-    Const COL_UNIT_COUNT = 10
-    Const COL_UPDATED_BY = 11
-
-    ' --- Clear any existing highlights ---
-    rng.Interior.Pattern = xlNone
-
-    Dim i As Long
-    Dim dict As Object
-    Set dict = CreateObject("Scripting.Dictionary")
-    Dim key As Variant
-
-    ' --- Step 1: Build group-by dictionary for the latest eligible eff_date ≤ efctv_date ---
-    For i = 1 To rng.Rows.Count
-        Dim rowEffDate As Variant
-        rowEffDate = rng.Cells(i, COL_EFF_DATE).Value
-
-        If IsDate(rowEffDate) Then
-            If CDate(rowEffDate) <= efctv_date Then
-                Dim acct_type As String: acct_type = Trim(UCase(rng.Cells(i, COL_ACCT_TYPE).Value))
-                Dim sub_acct_type As String: sub_acct_type = Trim(UCase(rng.Cells(i, COL_SUB_ACCT_TYPE).Value))
-                Dim updated_by As String: updated_by = Trim(UCase(rng.Cells(i, COL_UPDATED_BY).Value))
-                Dim delete_flag As String: delete_flag = Trim(UCase(rng.Cells(i, COL_DELETE_FLAG).Value))
-
-                ' Exclude invalid records
-                If acct_type <> "RESERVE" And acct_type <> "FORFEITURE" _
-                And sub_acct_type <> "RESERVE" And sub_acct_type <> "FORFEITURE" _
-                And updated_by <> "INFORMATICA_DEL" _
-                And delete_flag = "N" Then
-
-                    ' Build grouping key
-                    key = sub_acct_type & "|" & rng.Cells(i, COL_FUND_CD).Value & "|" & rng.Cells(i, COL_MBR_ACCT_CD).Value
-
-                    ' Keep only the latest eff_date per group
-                    If Not dict.exists(key) Then
-                        dict.Add key, i
-                    Else
-                        Dim prevRow As Long: prevRow = dict(key)
-                        If rng.Cells(i, COL_EFF_DATE).Value > rng.Cells(prevRow, COL_EFF_DATE).Value Then
-                            dict(key) = i
-                        End If
-                    End If
-                End If
-            End If
-        End If
-    Next i
-
-    ' --- Step 2: Highlight retained rows ---
-    Dim r As Long
-    For Each key In dict.Keys
-        r = dict(key)
-        rng.Rows(r).Interior.Color = RGB(198, 239, 206) ' Light green
-    Next key
-
-    MsgBox "Highlighting complete. " & dict.Count & " rows selected.", vbInformation
-End Sub
-
-
-
-###############update
-
-Sub HighlightFRSFilteredNAVRecordsWithGroupingAndSum()
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
-
-    ' Set your data range (no header row)
-    Dim rng As Range
-    Set rng = ws.Range("A37:K51")
-
-    ' Define NAV effective date (as of tb_fund_price.efctv_date)
-    Dim efctv_date As Date
-    efctv_date = DateValue("2026-04-16")
-
-    ' Column indexes (adjust if range structure changes)
-    Const COL_DELETE_FLAG = 1
-    Const COL_SCHEME_CD = 2
-    Const COL_EMPLR_ACCT_CD = 3
-    Const COL_PAYROLL_GROUP_ID = 4
-    Const COL_MBR_ACCT_CD = 5
-    Const COL_ACCT_TYPE = 6
-    Const COL_SUB_ACCT_TYPE = 7
-    Const COL_EFF_DATE = 8
-    Const COL_FUND_CD = 9
-    Const COL_UNIT_COUNT = 10
-    Const COL_UPDATED_BY = 11
-
-    ' Clear all existing highlights
-    rng.Interior.Pattern = xlNone
-
-    Dim i As Long
-    Dim key As Variant
-    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-
-    ' First pass: group by (sub_acct_type, fund_cd, mbr_acct_cd) and keep the latest eff_date row
-    For i = 1 To rng.Rows.Count
-        Dim acct_type As String: acct_type = Trim(UCase(rng.Cells(i, COL_ACCT_TYPE).Value))
-        Dim sub_acct_type As String: sub_acct_type = Trim(UCase(rng.Cells(i, COL_SUB_ACCT_TYPE).Value))
-        Dim fund_cd As String: fund_cd = Trim(rng.Cells(i, COL_FUND_CD).Value)
-        Dim mbr_acct_cd As String: mbr_acct_cd = Trim(rng.Cells(i, COL_MBR_ACCT_CD).Value)
-        Dim eff_date As Variant: eff_date = rng.Cells(i, COL_EFF_DATE).Value
-        Dim delete_flag As String: delete_flag = Trim(UCase(rng.Cells(i, COL_DELETE_FLAG).Value))
-        Dim updated_by As String: updated_by = Trim(UCase(rng.Cells(i, COL_UPDATED_BY).Value))
-
-        If IsDate(eff_date) Then
-            If CDate(eff_date) <= efctv_date _
-               And acct_type <> "RESERVE" _
-               And acct_type <> "FORFEITURE" _
-               And sub_acct_type <> "RESERVE" _
-               And sub_acct_type <> "FORFEITURE" _
-               And updated_by <> "INFORMATICA_DEL" _
-               And delete_flag = "N" Then
-
-                key = sub_acct_type & "|" & fund_cd & "|" & mbr_acct_cd
-
-                If Not dict.exists(key) Then
-                    dict.Add key, i
-                Else
-                    Dim prevRow As Long: prevRow = dict(key)
-                    If rng.Cells(i, COL_EFF_DATE).Value > rng.Cells(prevRow, COL_EFF_DATE).Value Then
-                        dict(key) = i
-                    End If
-                End If
-            End If
-        End If
-    Next i
-
-    ' Highlight retained rows and sum their unit_count
-    Dim r As Long, total_unit_count As Double
-    For Each key In dict.Keys
-        r = dict(key)
-        rng.Rows(r).Interior.Color = RGB(198, 239, 206) ' Light green
-        If IsNumeric(rng.Cells(r, COL_UNIT_COUNT).Value) Then
-            total_unit_count = total_unit_count + rng.Cells(r, COL_UNIT_COUNT).Value
-        End If
-    Next key
-
-    ' Output total unit count below the selected range in unit_count column
-    Dim outputCell As Range
-    Set outputCell = rng.Cells(rng.Rows.Count + 1, COL_UNIT_COUNT)
-    outputCell.Value = total_unit_count
-    outputCell.Font.Bold = True
-    outputCell.Interior.Color = RGB(255, 255, 153) ' Light yellow
-    outputCell.NumberFormat = "#,##0.00"
-
-    MsgBox "Filtering complete. " & dict.Count & " rows selected. Total unit count = " & total_unit_count, vbInformation
-End Sub
+    extract_and_generate_word(excel_path, sheet_name, case_ids, output_path)
