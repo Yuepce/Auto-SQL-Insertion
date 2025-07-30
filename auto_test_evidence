@@ -1,0 +1,103 @@
+import os
+import re
+import unicodedata
+import pandas as pd
+from docx import Document
+from docx.shared import Pt
+from docx.oxml.ns import qn
+from datetime import datetime
+
+def normalize_text(s: str) -> str:
+    if s is None:
+        return ""
+    s = unicodedata.normalize("NFKC", str(s))
+    s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
+    return s.strip()
+
+def add_bold_paragraph(doc_obj, label, content):
+    p = doc_obj.add_paragraph()
+    run = p.add_run(f"{label}:\n")
+    run.bold = True
+    run.font.size = Pt(11)
+    run.font.name = 'Arial'
+    run._element.rPr.rFonts.set(qn('w:eastAsia'), '微软雅黑')
+    p.add_run(content)
+
+def extract_and_generate_word(excel_path, sheet_name, case_suffixes, output_path, split_by_case=False):
+    if not os.path.exists(excel_path):
+        raise FileNotFoundError(f"❌ Excel 文件路径不存在: {excel_path}")
+
+    try:
+        df = pd.read_excel(excel_path, sheet_name=sheet_name, header=None, engine="openpyxl", dtype=str)
+    except Exception as e:
+        raise Exception(f"❌ 加载 sheet 出错: {e}")
+
+    col_id = df.columns[0]
+    col_desc = df.columns[3] if df.shape[1] > 3 else None
+    col_cond = df.columns[4] if df.shape[1] > 4 else None
+    col_exp = df.columns[5] if df.shape[1] > 5 else None
+
+    hits = 0
+    all_docs = []
+
+    for suffix in case_suffixes:
+        pattern = re.compile(rf".*_{suffix.zfill(2)}$")
+        matched_rows = df[df[col_id].astype(str).apply(lambda x: bool(pattern.match(normalize_text(x))))]
+
+        if matched_rows.empty:
+            print(f"⚠️ 未找到后缀为 _{suffix} 的 Test Case ID")
+            continue
+
+        for _, row in matched_rows.iterrows():
+            case_id = normalize_text(row[col_id])
+            desc = normalize_text(row[col_desc]) if col_desc else ""
+            cond = normalize_text(row[col_cond]) if col_cond else ""
+            exp = normalize_text(row[col_exp]) if col_exp else ""
+
+            doc = Document()
+            doc.add_heading("Selected Test Case", level=0)
+            doc.add_heading(case_id, level=1)
+
+            add_bold_paragraph(doc, "Description", desc)
+            add_bold_paragraph(doc, "Test Condition", cond)
+            add_bold_paragraph(doc, "Expected Result", exp)
+
+            if split_by_case:
+                base, ext = os.path.splitext(output_path)
+                filename = f"{base}_{case_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+                doc.save(filename)
+                print(f"✅ 单独保存 Word: {filename}")
+            else:
+                all_docs.append((case_id, desc, cond, exp))
+            hits += 1
+
+    if not split_by_case and hits > 0:
+        doc = Document()
+        doc.add_heading("Selected Test Cases Report", level=0)
+
+        for case_id, desc, cond, exp in all_docs:
+            doc.add_heading(case_id, level=1)
+            add_bold_paragraph(doc, "Description", desc)
+            add_bold_paragraph(doc, "Test Condition", cond)
+            add_bold_paragraph(doc, "Expected Result", exp)
+            doc.add_paragraph("")
+
+        base, ext = os.path.splitext(output_path)
+        final_path = f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+        doc.save(final_path)
+        print(f"✅ Word 文件已保存至: {final_path}")
+        return final_path
+
+    if hits == 0:
+        print("❌ 没有匹配任何 Test Case ID")
+        return None
+
+# 运行测试
+if __name__ == "__main__":
+    excel_path = r"C:\Users\h0a2\Desktop\Unit and Integration Test Case - FCRM Reporting_v0.1.xlsx"
+    sheet_name = "Test Cases_Batch2b"
+    case_suffixes = ["02", "07", "10"]
+    output_path = r"C:\Users\h0a2\Desktop\Selected_Test_Cases.docx"
+    split_by_case = False #True
+
+    extract_and_generate_word(excel_path, sheet_name, case_suffixes, output_path, split_by_case)
