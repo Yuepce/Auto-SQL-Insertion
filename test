@@ -3,43 +3,45 @@ import pandas as pd
 
 def parse_test_cases_from_text(raw_text: str, column_names: list, output_path: str):
     """
-    从粘贴复制的纯文本中提取测试用例字段并保存为 Excel，字段写入各列。
+    从纯文本中提取测试用例字段并保存为 Excel，每一列对应一个字段（支持 Markdown 和普通字段名）。
     """
 
-    # 正则将每个 Test Case 分开
-    case_blocks = re.split(r'\n\s*\d+\.\s*\*?\*?Test Case ID\*?\*?:\s*', raw_text.strip())
-    if len(case_blocks) <= 1:
-        print("❌ 无法识别任何 Test Case ID。请确认格式正确，例如：1. **Test Case ID**: GOV_Term_P01")
-        return
-
+    # 拆分每条 test case block，包含编号和 Test Case ID
+    pattern = r'\n?\s*\d+\.\s*\*?\*?Test Case ID\*?\*?:\s*(.+?)\n'
+    matches = list(re.finditer(pattern, raw_text))
     test_cases = []
-    for block in case_blocks[1:]:
-        case_data = {}
-        # 把第一行作为 Test Case ID
-        lines = block.strip().splitlines()
-        case_data["Test Case ID"] = lines[0].strip()
 
-        # 将剩下的字段逐个提取
-        joined_block = "\n".join(lines[1:])
+    for i, match in enumerate(matches):
+        # 当前 Test Case ID
+        case_id = match.group(1).strip()
+
+        # 获取当前 block 的起止位置
+        start_idx = match.end()
+        end_idx = matches[i + 1].start() if i + 1 < len(matches) else len(raw_text)
+        block_text = raw_text[start_idx:end_idx]
+
+        record = {}
+        record["Test Case ID"] = case_id  # 主键字段
+
         for col in column_names:
-            # 容忍 Markdown 和普通格式
-            pattern = rf'(?:\*\*)?{re.escape(col)}(?:\*\*)?:\s*(.*?)\s*(?=(?:\n\s*(?:\*\*)?[A-Z][^:]*?:|\Z))'
-            match = re.search(pattern, joined_block, re.DOTALL)
-            if match:
-                content = match.group(1).strip()
-                content = re.sub(r'\n\s*-\s*', '\n- ', content)  # 让 Interpretation 更好显示
-                case_data[col] = content
+            # 匹配字段段落
+            col_pattern = rf'(?:\*\*)?{re.escape(col)}(?:\*\*)?:\s*(.*?)(?=\n\s*\*?[A-Z][^:]*?:|\Z)'
+            match_col = re.search(col_pattern, block_text, re.DOTALL)
+            if match_col:
+                content = match_col.group(1).strip()
+                content = re.sub(r'\n\s*-\s*', '\n- ', content)  # 美化项目符号
+                record[col] = content
             else:
-                case_data[col] = ""
+                record[col] = ""
 
-        test_cases.append(case_data)
+        test_cases.append(record)
 
-    # 输出 Excel
+    # 写入 Excel
     df = pd.DataFrame(test_cases)
     df.to_excel(output_path, index=False)
-    print(f"✅ 成功导出 {len(df)} 条 test case 至 {output_path}")
+    print(f"✅ 提取成功！共 {len(df)} 条记录导出至 {output_path}")
 
-# ✅ 使用方式（直接运行）
+# ✅ 示例调用
 if __name__ == "__main__":
     raw_text = """
 1. **Test Case ID**: GOV_Term_P01
@@ -55,8 +57,9 @@ if __name__ == "__main__":
 - Uses latest balance record
 **Expected Result**: Correct value shown
     """
-    
-    columns = ["Rule Reference", "Interpretation", "Expected Result"]
+
+    # 所有字段列（Test Case ID 现在也作为正式字段）
+    column_names = ["Rule Reference", "Interpretation", "Expected Result"]
     output_path = "Parsed_Test_Cases.xlsx"
 
-    parse_test_cases_from_text(raw_text, columns, output_path)
+    parse_test_cases_from_text(raw_text, column_names, output_path)
