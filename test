@@ -1,54 +1,64 @@
 import re
 import pandas as pd
 
-def parse_test_cases(raw_text: str, column_names: list, output_path: str):
+def parse_test_cases(text: str, columns: list) -> pd.DataFrame:
     """
-    从纯文本中提取测试用例信息，并导出为Excel。
+    Parse test cases from markdown-style or plain text into a DataFrame.
+    
+    Args:
+        text (str): Raw input test case text.
+        columns (list): List of column headers to extract, e.g. ["Test Case ID", "Rule Reference", "Interpretation", "Expected Result"]
 
-    参数:
-    - raw_text: str，原始的纯文本内容
-    - column_names: list，用户指定的字段列表，如 ['Test Case ID', 'Rule Reference', 'Interpretation', 'Expected Result']
-    - output_path: str，输出Excel文件路径
+    Returns:
+        pd.DataFrame: Structured data with one row per test case.
     """
-    # 构造正则模式，每个字段匹配以 "<字段名>:" 开头的行
-    pattern = r'(Test Case ID: .+?)(?=Test Case ID: |\Z)'  # 每段以 Test Case ID 开头
-    case_blocks = re.findall(pattern, raw_text, flags=re.DOTALL)
+    # Normalize line breaks and remove leading/trailing whitespace
+    text = text.replace('\r\n', '\n').strip()
 
-    cases = []
-    for block in case_blocks:
-        case_data = {}
-        for col in column_names:
-            # 捕获格式: 字段名: 内容（直到下一个字段或结尾）
-            col_pattern = rf'{col}:\s*(.+?)(?=\n[A-Z][a-zA-Z ]+?:|\Z)'  # 捕获当前字段的值
-            match = re.search(col_pattern, block, flags=re.DOTALL)
-            case_data[col] = match.group(1).strip() if match else ""
-        cases.append(case_data)
+    # Combine all patterns for start of each test case based on Test Case ID
+    test_case_pattern = re.compile(r'(?:\*\*)?Test Case ID(?:\*\*)?:\s*(.+?)\s*(?=\n(?:\*\*)?Test Case ID(?:\*\*)?:|\Z)', re.DOTALL)
 
-    # 输出为 Excel
-    df = pd.DataFrame(cases)
-    df.to_excel(output_path, index=False)
-    print(f"✅ 输出成功: {output_path}")
+    all_matches = test_case_pattern.findall(text)
+    raw_blocks = test_case_pattern.finditer(text)
 
-# 示例用法：
-if __name__ == "__main__":
-    # 示例纯文本（请替换为粘贴内容）
-    text_input = """
-Test Case ID: GOV_Term_P01
-Rule Reference: Rule#1.1
-Interpretation: Terminated member with valid conditions
-Expected Result: Member included in report
+    rows = []
+    for match in raw_blocks:
+        block = match.group(0)
+        row_data = {}
+        for col in columns:
+            # Flexible regex to match plain or markdown bolded field names
+            col_pattern = re.compile(
+                rf'(?:\*\*)?{re.escape(col)}(?:\*\*)?:\s*(.+?)(?=\n(?:\s*(?:\*\*)?[A-Z][^:]*?(?:\*\*)?:|\Z))',
+                re.DOTALL
+            )
+            col_match = col_pattern.search(block)
+            if col_match:
+                value = col_match.group(1).strip()
+                row_data[col] = value
+            else:
+                row_data[col] = ""
+        rows.append(row_data)
+
+    df = pd.DataFrame(rows)
+    return df
+
+
+# 示例纯文本（支持粘贴 Markdown 粗体或普通字段名）
+raw_text = """
+**Test Case ID**: GOV_Term_P01  
+**Rule Reference**: Rule #1.1  
+**Interpretation**:  
+- Must be TERMD  
+**Expected Result**: Member included  
 
 Test Case ID: GOV_Term_P02
-Rule Reference: Rule#3
-Interpretation: ERVC and ERVC2 balances calculated
-Expected Result: Redemption shown for both sub-account types
+Rule Reference: Rule #3.2
+Interpretation:
+- Use latest balance record
+Expected Result: Redemption correct
 """
 
-    # 自定义列名（顺序即输出顺序）
-    column_list = ['Test Case ID', 'Rule Reference', 'Interpretation', 'Expected Result']
+columns = ["Test Case ID", "Rule Reference", "Interpretation", "Expected Result"]
 
-    # 输出路径
-    output_file = "test_cases_output.xlsx"
-
-    # 运行函数
-    parse_test_cases(text_input, column_list, output_file)
+df = parse_test_cases(raw_text, columns)
+print(df)
