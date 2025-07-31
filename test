@@ -3,43 +3,51 @@ import pandas as pd
 
 def parse_test_cases_from_text(raw_text: str, column_names: list, output_path: str):
     """
-    从纯文本中提取测试用例字段并保存为 Excel，每一列对应一个字段（支持 Markdown 和普通字段名）。
+    从纯文本中提取测试用例字段并保存为 Excel，字段准确分列。
     """
 
-    # 拆分每条 test case block，包含编号和 Test Case ID
+    # 匹配每条 Test Case（编号 + Test Case ID）
     pattern = r'\n?\s*\d+\.\s*\*?\*?Test Case ID\*?\*?:\s*(.+?)\n'
     matches = list(re.finditer(pattern, raw_text))
+
     test_cases = []
-
     for i, match in enumerate(matches):
-        # 当前 Test Case ID
-        case_id = match.group(1).strip()
+        case_data = {}
+        case_data["Test Case ID"] = match.group(1).strip()
 
-        # 获取当前 block 的起止位置
-        start_idx = match.end()
-        end_idx = matches[i + 1].start() if i + 1 < len(matches) else len(raw_text)
-        block_text = raw_text[start_idx:end_idx]
+        # 提取该 test case 的正文块
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(raw_text)
+        block_text = raw_text[start:end]
 
-        record = {}
-        record["Test Case ID"] = case_id  # 主键字段
+        # 提取每个字段内容（严格：从该字段开始，到下一个字段前）
+        for j, field in enumerate(column_names):
+            # 找起点
+            pattern_start = rf'(?:\*\*)?{re.escape(field)}(?:\*\*)?:'
+            match_field = re.search(pattern_start, block_text, re.IGNORECASE)
+            if not match_field:
+                case_data[field] = ""
+                continue
 
-        for col in column_names:
-            # 匹配字段段落
-            col_pattern = rf'(?:\*\*)?{re.escape(col)}(?:\*\*)?:\s*(.*?)(?=\n\s*\*?[A-Z][^:]*?:|\Z)'
-            match_col = re.search(col_pattern, block_text, re.DOTALL)
-            if match_col:
-                content = match_col.group(1).strip()
-                content = re.sub(r'\n\s*-\s*', '\n- ', content)  # 美化项目符号
-                record[col] = content
-            else:
-                record[col] = ""
+            field_start = match_field.end()
 
-        test_cases.append(record)
+            # 找终点：下一个字段的位置或结尾
+            field_end = len(block_text)
+            for next_field in column_names[j+1:]:
+                next_match = re.search(rf'(?:\*\*)?{re.escape(next_field)}(?:\*\*)?:', block_text[field_start:], re.IGNORECASE)
+                if next_match:
+                    field_end = field_start + next_match.start()
+                    break
 
-    # 写入 Excel
+            content = block_text[field_start:field_end].strip()
+            content = re.sub(r'\n\s*-\s*', '\n- ', content)  # 项目符号美化
+            case_data[field] = content
+
+        test_cases.append(case_data)
+
     df = pd.DataFrame(test_cases)
     df.to_excel(output_path, index=False)
-    print(f"✅ 提取成功！共 {len(df)} 条记录导出至 {output_path}")
+    print(f"✅ 提取成功！共 {len(df)} 条记录导出至：{output_path}")
 
 # ✅ 示例调用
 if __name__ == "__main__":
@@ -58,8 +66,7 @@ if __name__ == "__main__":
 **Expected Result**: Correct value shown
     """
 
-    # 所有字段列（Test Case ID 现在也作为正式字段）
     column_names = ["Rule Reference", "Interpretation", "Expected Result"]
-    output_path = "Parsed_Test_Cases.xlsx"
+    output_path = "Parsed_Test_Cases_Correct.xlsx"
 
     parse_test_cases_from_text(raw_text, column_names, output_path)
