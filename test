@@ -3,60 +3,60 @@ import pandas as pd
 
 def parse_test_cases_from_text(raw_text: str, column_names: list, output_path: str):
     """
-    从粘贴复制的纯文本中提取测试用例信息并保存为 Excel。
-    :param raw_text: 粘贴的纯文本（str）
-    :param column_names: 要提取的列名（列表），例如 ["Test Case ID", "Rule Reference", "Interpretation", "Expected Result"]
-    :param output_path: Excel 输出路径
+    从粘贴复制的纯文本中提取测试用例字段并保存为 Excel，字段写入各列。
     """
-    cases = []
 
-    # 按 test case 分割
-    entries = re.split(r'\n\s*\d+\.\s*\*?\*?Test Case ID\*?\*?:', raw_text)
-    if len(entries) <= 1:
-        print("⚠️ 没有找到任何 Test Case ID，请检查格式")
+    # 正则将每个 Test Case 分开
+    case_blocks = re.split(r'\n\s*\d+\.\s*\*?\*?Test Case ID\*?\*?:\s*', raw_text.strip())
+    if len(case_blocks) <= 1:
+        print("❌ 无法识别任何 Test Case ID。请确认格式正确，例如：1. **Test Case ID**: GOV_Term_P01")
         return
 
-    for entry in entries[1:]:
-        entry = "Test Case ID: " + entry.strip()  # 补回字段标题
-        record = {}
+    test_cases = []
+    for block in case_blocks[1:]:
+        case_data = {}
+        # 把第一行作为 Test Case ID
+        lines = block.strip().splitlines()
+        case_data["Test Case ID"] = lines[0].strip()
+
+        # 将剩下的字段逐个提取
+        joined_block = "\n".join(lines[1:])
         for col in column_names:
-            # 支持 Markdown (e.g. **Field**) 或普通字段格式
-            pattern = rf'\*?{col}\*?:\s*(.*?)\s*(?=(\n\s*\*?[A-Z][^:]*?:|\Z))'
-            match = re.search(pattern, entry, re.DOTALL | re.IGNORECASE)
+            # 容忍 Markdown 和普通格式
+            pattern = rf'(?:\*\*)?{re.escape(col)}(?:\*\*)?:\s*(.*?)\s*(?=(?:\n\s*(?:\*\*)?[A-Z][^:]*?:|\Z))'
+            match = re.search(pattern, joined_block, re.DOTALL)
             if match:
-                value = match.group(1).strip()
-                value = re.sub(r'\n\s*-\s*', '\n- ', value)  # 保留 Markdown 项目符号
-                record[col] = value
+                content = match.group(1).strip()
+                content = re.sub(r'\n\s*-\s*', '\n- ', content)  # 让 Interpretation 更好显示
+                case_data[col] = content
             else:
-                record[col] = ""
-        cases.append(record)
+                case_data[col] = ""
 
-    # 保存为 Excel
-    df = pd.DataFrame(cases)
+        test_cases.append(case_data)
+
+    # 输出 Excel
+    df = pd.DataFrame(test_cases)
     df.to_excel(output_path, index=False)
-    print(f"✅ 已导出 {len(df)} 条 test case 至: {output_path}")
+    print(f"✅ 成功导出 {len(df)} 条 test case 至 {output_path}")
 
-# 示例使用
+# ✅ 使用方式（直接运行）
 if __name__ == "__main__":
-    # 将你复制的测试用例文本粘贴到下面这个 """ ... """ 字符串中
     raw_text = """
-    ### Test Cases with Rule References and Interpretations
+1. **Test Case ID**: GOV_Term_P01
+**Rule Reference**: Report Criteria #1.1, #1.2
+**Interpretation**:
+- Status must be "TERMD"
+- Date within range
+**Expected Result**: Member included
 
-    1. **Test Case ID**: GOV_Term_P01
-       **Rule Reference**: Report Criteria #1.1, #1.2
-       **Interpretation**:
-       - Status must be "TERMD"
-       - Date within range
-       **Expected Result**: Member included
-
-    2. **Test Case ID**: GOV_Term_P02
-       **Rule Reference**: Report Criteria #3.2
-       **Interpretation**:
-       - Uses latest balance record
-       **Expected Result**: Correct value shown
+2. **Test Case ID**: GOV_Term_P02
+**Rule Reference**: Report Criteria #3.2
+**Interpretation**:
+- Uses latest balance record
+**Expected Result**: Correct value shown
     """
-
-    column_names = ["Test Case ID", "Rule Reference", "Interpretation", "Expected Result"]
+    
+    columns = ["Rule Reference", "Interpretation", "Expected Result"]
     output_path = "Parsed_Test_Cases.xlsx"
 
-    parse_test_cases_from_text(raw_text, column_names, output_path)
+    parse_test_cases_from_text(raw_text, columns, output_path)
