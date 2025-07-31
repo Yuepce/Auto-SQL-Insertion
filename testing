@@ -1,49 +1,361 @@
 import re
 import pandas as pd
 
-def parse_test_cases_to_excel(text: str, output_path: str):
+def parse_test_cases_to_excel_from_text(input_text: str, output_path: str):
     """
-    将结构化的测试用例文本内容解析为DataFrame并导出为Excel。
-    
-    参数：
-        text: 包含测试用例的文本内容
-        output_path: 输出Excel路径，如 '/path/to/output.xlsx'
+    将测试用例文本解析为标准Excel，支持Requirement ID字段插入。
+
+    参数:
+        input_text: 粘贴的测试用例纯文本内容
+        output_path: 输出Excel路径
     """
-    # 使用正则表达式提取Test Case内容
     pattern = r"Test Case ID:\s*(GOV_Term_[PN]\d+)\s*" \
               r"Description:\s*(.*?)\s*" \
               r"Test Condition:\s*(.*?)" \
               r"Expected Result:\s*(.*?)(?=\nTest Case ID:|$)"
-    
-    matches = re.findall(pattern, text, flags=re.DOTALL)
 
-    records = []
+    matches = re.findall(pattern, input_text, flags=re.DOTALL)
+
+    rows = []
     for case_id, desc, cond, expected in matches:
         test_type = "Positive" if "_P" in case_id else "Negative"
-        record = {
+        rows.append({
             "Test Case ID": case_id.strip(),
             "Test Activity Ref #": "",
+            "Requirement ID": "",
             "Description": f"[{test_type}] {desc.strip()}",
             "Test Condition / Input": cond.strip().replace("\n", " "),
             "Expected Result / Output": expected.strip().replace("\n", " "),
             "Actual Result": "",
             "Pass/Fail": "",
             "Comments": ""
-        }
-        records.append(record)
+        })
 
-    # 写入 Excel
-    df = pd.DataFrame(records)
+    # 指定列顺序
+    column_order = [
+        "Test Case ID",
+        "Test Activity Ref #",
+        "Requirement ID",
+        "Description",
+        "Test Condition / Input",
+        "Expected Result / Output",
+        "Actual Result",
+        "Pass/Fail",
+        "Comments"
+    ]
+
+    df = pd.DataFrame(rows)[column_order]
     df.to_excel(output_path, index=False)
-    print(f"✅ 成功生成Excel文件：{output_path}")
+    print(f"✅ 测试用例成功导出至：{output_path}")
 
 # 示例调用
 if __name__ == "__main__":
-    # 用你的实际路径替换这里
-    input_file = "test_cases_input.txt"
-    output_file = "HKSAR_Term_Vesting_TestCases.xlsx"
+    pasted_text = """
+Test Cases for FS_3.2.1.10 Output 10: HKSAR Term Member Vesting
+Total: 40 test cases (30 Positive, 10 Negative)
 
-    with open(input_file, "r", encoding="utf-8") as f:
-        content = f.read()
+Positive Test Cases (30)
+Test Case ID: GOV_Term_P01
+Description: Terminated member with valid conditions (TERMD status, term date within reporting period, employer code 317094).
+Test Condition:
 
-    parse_test_cases_to_excel(content, output_file)
+TB_MEMBER_ACCOUNT.STATUS_CD = "TERMD"
+
+TERM_DATE = 2024-12-15 (Oct-Dec 2024 reporting period)
+
+EMPLR_ACCT_CD linked to ra_government_config.orig_emplr_cd="317094"
+
+All tables: DELETE_FLAG = "N"
+Expected Result: Member included in report with all fields populated.
+
+Test Case ID: GOV_Term_P02
+Description: Multiple sub-account types (ERVC, ERVC2) with valid balances.
+Test Condition:
+
+Member has SUB_ACCT_TYPE = "ERVC" and "ERVC2" in TB_ACCOUNT_BALANCE.
+
+Latest EFF_DATE ≤ TERM_DATE - 2 business days.
+Expected Result: Fields #11 (ERVC) and #12 (ERVC2) show correct redemption amounts.
+
+Test Case ID: GOV_Term_P03
+Description: Valid "UNVEST_BAL_OUT" transaction (COMPLETE status).
+Test Condition:
+
+TB_TRANSACTIONS.ACTIVITY_TYPE_CD = "UNVEST_BAL_OUT"
+
+SUB_ACTIVITY_CD = "UNVEST_BAL_OUT"
+
+STATUS = "COMPLETE"
+Expected Result: Transaction used to calculate Fields #20–26 (Vesting %).
+
+Test Case ID: GOV_Term_P04
+Description: Latest TB_ACCOUNT_BALANCE record selected (max EFF_DATE).
+Test Condition:
+
+Multiple balance records; latest has EFF_DATE = TERM_DATE - 2 business days.
+
+RECORD_LAST_UPDATED_BY ≠ "INFORMATICA_DEL".
+Expected Result: Only the latest balance record used for Fields #11–19.
+
+Test Case ID: GOV_Term_P05
+Description: Valid HKID format (e.g., A123456(7)).
+Test Condition:
+
+TB_MEMBER_ACCOUNT.HKID_NO = "A123456"
+
+HKID_CHECK_DIGIT = "7"
+Expected Result: Field #4 displays "A123456(7)".
+
+Test Case ID: GOV_Term_P06
+Description: Valid Passport used when HKID is empty.
+Test Condition:
+
+HKID_NO = NULL, PASSPORT_NO = "E123456"
+Expected Result: Field #3 = "Passport", Field #4 = "E123456".
+
+Test Case ID: GOV_Term_P07
+Description: ERVC Vesting % calculation (NAV = 1000, UNVEST AMOUNT = 200).
+Test Condition:
+
+Field #12 (ERVC NAV) = 1000
+
+TB_TRANSACTIONS_SUB_ACCT.GROSS_AMOUNT sum = 200 for SUB_ACCT_TYPE="ERVC"
+Expected Result: Field #20 = 80.00 ((1000-200)/1000 * 100).
+
+Test Case ID: GOV_Term_P08
+Description: No UNVEST_BAL_OUT transactions for ERVC.
+Test Condition:
+
+Valid member with SUB_ACCT_TYPE="ERVC" but no matching transactions.
+Expected Result: Field #20 = 100.00 (no unvested amount).
+
+Test Case ID: GOV_Term_P09
+Description: Reporting period = Jan (previous year Oct–Dec).
+Test Condition:
+
+Report generated in Jan 2025.
+
+TERM_DATE between 2024-10-01 and 2024-12-31.
+Expected Result: Members with term dates in Oct-Dec 2024 included.
+
+Test Case ID: GOV_Term_P10
+Description: DELETE_FLAG = "Y" ignored for TB_ACCOUNT_BALANCE (per Rule 3b).
+Test Condition:
+
+TB_ACCOUNT_BALANCE.DELETE_FLAG = "Y" but RECORD_LAST_UPDATED_BY ≠ "INFORMATICA_DEL".
+Expected Result: Balance record included in Fields #11–19.
+
+Test Case ID: GOV_Term_P11
+Description: Multiple funds under one sub-account (ERVC).
+Test Condition:
+
+SUB_ACCT_TYPE="ERVC" has 2 funds with valid UNIT_COUNT and BID_PRICE_CNT.
+Expected Result: Field #11 = sum of (UNIT_COUNT * BID_PRICE_CNT) for both funds.
+
+Test Case ID: GOV_Term_P12
+Description: Valid TB_FUND_PRICE with max EFCTV_DATE ≤ TERM_DATE - 2 days.
+Test Condition:
+
+Latest TB_FUND_PRICE.EFCTV_DATE = TERM_DATE - 2 business days.
+Expected Result: Fund price used for redemption calculations.
+
+Test Case ID: GOV_Term_P13
+Description: Sorting by Employer/Member Account Code, Term Date.
+Test Condition:
+
+3 members with different EMPLR_ACCT_CD, MBR_ACCT_CD, TERM_DATE.
+Expected Result: Report sorted ascending by: Employer Code → Member Code → Term Date.
+
+Test Case ID: GOV_Term_P14
+Description: Zero balance for PREMPFER sub-account.
+Test Condition:
+
+SUB_ACCT_TYPE="PREMPFER" has no units.
+Expected Result: Field #18 = "0.00".
+
+Test Case ID: GOV_Term_P15
+Description: All tables DELETE_FLAG = "N" (Rule 5).
+Test Condition:
+
+TB_MEMBER_ACCOUNT, TB_TRANSACTIONS, TB_ACCOUNT_BALANCE: DELETE_FLAG = "N".
+Expected Result: Member included in report.
+
+Test Case ID: GOV_Term_P16
+Description: Member with both HKID and Passport (HKID prioritized).
+Test Condition:
+
+HKID_NO = "B987654", PASSPORT_NO = "F876543".
+Expected Result: Field #3 = "HKID", Field #4 = "B987654(<check_digit>)".
+
+Test Case ID: GOV_Term_P17
+Description: Boundary term date (first day of reporting period).
+Test Condition:
+
+TERM_DATE = 2024-10-01 (Jul-Sep 2024 period).
+Expected Result: Member included.
+
+Test Case ID: GOV_Term_P18
+Description: Boundary term date (last day of reporting period).
+Test Condition:
+
+TERM_DATE = 2024-09-30 (Jul-Sep 2024 period).
+Expected Result: Member included.
+
+Test Case ID: GOV_Term_P19
+Description: Valid "Dealing Date" = TERM_DATE - 2 business days.
+Test Condition:
+
+TERM_DATE = 2024-12-17 → Dealing Date = 2024-12-15 (if 15th is business day).
+Expected Result: Field #10 = "12/15/2024".
+
+Test Case ID: GOV_Term_P20
+Description: No matching records (empty report).
+Test Condition:
+
+No members meet extraction criteria.
+Expected Result: CSV file with header and message: "No matching record has been identified".
+
+Test Case ID: GOV_Term_P21
+Description: ERVC Vesting % = 0 when NAV = 0.
+Test Condition:
+
+Field #12 (NAV) = 0, no UNVEST_BAL_OUT transactions.
+Expected Result: Field #20 = "0.00".
+
+Test Case ID: GOV_Term_P22
+Description: Multiple UNVEST_BAL_OUT transactions for ERVC2.
+Test Condition:
+
+2 transactions for SUB_ACCT_TYPE="ERVC2" with GROSS_AMOUNT = 150 and 350.
+Expected Result: Field #21 uses UNVEST AMOUNT = 500.
+
+Test Case ID: GOV_Term_P23
+Description: Valid termination reason from TB_TERMINATION.
+Test Condition:
+
+TB_TERMINATION.TERM_REASON = "Retirement".
+Expected Result: Field #8 = "Retirement".
+
+Test Case ID: GOV_Term_P24
+Description: Correct employer code from TB_TRANSACTIONS.
+Test Condition:
+
+TB_TRANSACTIONS.EMPLR_ACCT_CD = "GOV_001" (linked to 317094).
+Expected Result: Field #1 = "GOV_001".
+
+Test Case ID: GOV_Term_P25
+Description: Report Centre from TB_MEMBER_ACCOUNT.PAYROLL_GROUP_ID.
+Test Condition:
+
+PAYROLL_GROUP_ID = "CENTRE_A".
+Expected Result: Field #2 = "CENTRE_A".
+
+Test Case ID: GOV_Term_P26
+Description: Member name formatting: LAST_NM + " " + FIRST_NM.
+Test Condition:
+
+LAST_NM = "Chan", FIRST_NM = "Tai Man".
+Expected Result: Field #6 = "Chan Tai Man".
+
+Test Case ID: GOV_Term_P27
+Description: Date formats: MM/DD/YYYY for Term/Employment dates.
+Test Condition:
+
+TERM_DATE = 2024-12-31, DATE_OF_EMPLOYMENT = 2000-01-15.
+Expected Result: Field #7 = "12/31/2024", Field #9 = "01/15/2000".
+
+Test Case ID: GOV_Term_P28
+Description: Valid PREMPFER2 redemption amount.
+Test Condition:
+
+SUB_ACCT_TYPE="PREMPFER2" with units and valid fund price.
+Expected Result: Field #19 > 0.00.
+
+Test Case ID: GOV_Term_P29
+Description: ERVC7 Vesting % with NAV and UNVEST AMOUNT.
+Test Condition:
+
+Field #18 (NAV) = 2000, UNVEST AMOUNT = 500 for ERVC7.
+Expected Result: Field #26 = 75.00 ((2000-500)/2000 * 100).
+
+Test Case ID: GOV_Term_P30
+Description: CSV file naming: HKSAR_Term_Mem_Vesting_YYYYMMDD.csv.
+Test Condition:
+
+Report generated on 2025-01-05 (Jan 2025).
+Expected Result: Filename = HKSAR_Term_Mem_Vesting_20241231.csv (last day of previous month).
+
+Negative Test Cases (10)
+Test Case ID: GOV_Term_N01
+Description: Member status ≠ "TERMD" (e.g., "ACTIVE").
+Test Condition:
+
+STATUS_CD = "ACTIVE" but all other criteria met.
+Expected Result: Member excluded from report.
+
+Test Case ID: GOV_Term_N02
+Description: Term date outside reporting period (e.g., Apr report with term date in Feb).
+Test Condition:
+
+Report generated in Apr 2025 (Jan-Mar 2025 period).
+
+TERM_DATE = 2024-12-15 (previous year).
+Expected Result: Member excluded.
+
+Test Case ID: GOV_Term_N03
+Description: Invalid employer code (not linked to 317094).
+Test Condition:
+
+EMPLR_ACCT_CD not in ra_government_config.empf_emplr_cd (orig_emplr_cd="317094").
+Expected Result: Member excluded.
+
+Test Case ID: GOV_Term_N04
+Description: UNVEST_BAL_OUT transaction with status ≠ "COMPLETE".
+Test Condition:
+
+TB_TRANSACTIONS.STATUS = "PENDING".
+Expected Result: Transaction ignored; Field #20 = 100.00 (no unvested amount).
+
+Test Case ID: GOV_Term_N05
+Description: TB_ACCOUNT_BALANCE with RECORD_LAST_UPDATED_BY = "INFORMATICA_DEL".
+Test Condition:
+
+Valid balance record but RECORD_LAST_UPDATED_BY = "INFORMATICA_DEL".
+Expected Result: Balance record excluded; Field #11 = "0.00".
+
+Test Case ID: GOV_Term_N06
+Description: TB_MEMBER_ACCOUNT.DELETE_FLAG = "Y".
+Test Condition:
+
+Valid member but DELETE_FLAG = "Y".
+Expected Result: Member excluded.
+
+Test Case ID: GOV_Term_N07
+Description: No matching TB_FUND_PRICE (invalid fund code).
+Test Condition:
+
+TB_ACCOUNT_BALANCE.FUND_CD not in TB_FUND_PRICE.
+Expected Result: Field #11 = "0.00".
+
+Test Case ID: GOV_Term_N08
+Description: TB_TRANSACTIONS.DELETE_FLAG = "Y".
+Test Condition:
+
+Valid UNVEST_BAL_OUT transaction but DELETE_FLAG = "Y".
+Expected Result: Transaction ignored; Field #20 = 100.00.
+
+Test Case ID: GOV_Term_N09
+Description: Invalid report generation month (e.g., February).
+Test Condition:
+
+Report generated in Feb 2025 (not Jan/Apr/Jul/Oct).
+Expected Result: No report generated.
+
+Test Case ID: GOV_Term_N10
+Description: ra_government_config empty (no employer mapping).
+Test Condition:
+
+ra_government_config table has no records.
+Expected Result: All members excluded; "No matching record" report generated.
+"""
+    parse_test_cases_to_excel_from_text(pasted_text, "HKSAR_TestCases_Output_With_RequirementID.xlsx")
