@@ -1,44 +1,62 @@
 import re
 import pandas as pd
 
-def parse_test_cases_to_excel(raw_text: str, column_names: list, output_path: str):
-    # 正则处理每个字段内容
+def parse_test_cases_from_text(raw_text: str, column_names: list, output_path: str):
+    """
+    从粘贴复制的纯文本中提取测试用例信息并保存为 Excel。
+    :param raw_text: 粘贴的纯文本（str）
+    :param column_names: 要提取的列名（列表），例如 ["Test Case ID", "Rule Reference", "Interpretation", "Expected Result"]
+    :param output_path: Excel 输出路径
+    """
     cases = []
+
+    # 按 test case 分割
     entries = re.split(r'\n\s*\d+\.\s*\*?\*?Test Case ID\*?\*?:', raw_text)
     if len(entries) <= 1:
         print("⚠️ 没有找到任何 Test Case ID，请检查格式")
         return
-    for i, entry in enumerate(entries[1:], start=1):
-        entry = "Test Case ID: " + entry.strip()  # 补回被split掉的字段
+
+    for entry in entries[1:]:
+        entry = "Test Case ID: " + entry.strip()  # 补回字段标题
         record = {}
         for col in column_names:
-            # 允许 Markdown（**Field**）或普通格式（Field）
-            col_pattern = rf'\*?{col}\*?:\s*(.*?)\s*(?=(\n\s*\*?[A-Z][^:]*?:|\Z))'
-            match = re.search(col_pattern, entry, re.DOTALL | re.IGNORECASE)
+            # 支持 Markdown (e.g. **Field**) 或普通字段格式
+            pattern = rf'\*?{col}\*?:\s*(.*?)\s*(?=(\n\s*\*?[A-Z][^:]*?:|\Z))'
+            match = re.search(pattern, entry, re.DOTALL | re.IGNORECASE)
             if match:
                 value = match.group(1).strip()
-                value = re.sub(r'\n\s*-\s*', ' ', value)  # 合并解释行（若有）
+                value = re.sub(r'\n\s*-\s*', '\n- ', value)  # 保留 Markdown 项目符号
                 record[col] = value
             else:
                 record[col] = ""
         cases.append(record)
 
-    # 转为 DataFrame 并导出 Excel
+    # 保存为 Excel
     df = pd.DataFrame(cases)
     df.to_excel(output_path, index=False)
     print(f"✅ 已导出 {len(df)} 条 test case 至: {output_path}")
 
 # 示例使用
 if __name__ == "__main__":
-    # 你的纯文本内容（粘贴自复制内容）
-    with open("your_test_case_text.txt", "r", encoding="utf-8") as f:
-        raw_text = f.read()
+    # 将你复制的测试用例文本粘贴到下面这个 """ ... """ 字符串中
+    raw_text = """
+    ### Test Cases with Rule References and Interpretations
 
-    # 设置你想提取的列名（需与文本中字段名称一致）
-    columns = ["Test Case ID", "Rule Reference", "Interpretation", "Expected Result"]
+    1. **Test Case ID**: GOV_Term_P01
+       **Rule Reference**: Report Criteria #1.1, #1.2
+       **Interpretation**:
+       - Status must be "TERMD"
+       - Date within range
+       **Expected Result**: Member included
 
-    # 设置输出路径
-    output_excel = "Parsed_Test_Cases.xlsx"
+    2. **Test Case ID**: GOV_Term_P02
+       **Rule Reference**: Report Criteria #3.2
+       **Interpretation**:
+       - Uses latest balance record
+       **Expected Result**: Correct value shown
+    """
 
-    # 执行函数
-    parse_test_cases_to_excel(raw_text, columns, output_excel)
+    column_names = ["Test Case ID", "Rule Reference", "Interpretation", "Expected Result"]
+    output_path = "Parsed_Test_Cases.xlsx"
+
+    parse_test_cases_from_text(raw_text, column_names, output_path)
