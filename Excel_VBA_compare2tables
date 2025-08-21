@@ -1,55 +1,55 @@
 # Update： 
 def generate_vba_compare_macro(table_a_range, table_b_range, color_name):
-    # Define RGB values for common color names
-    color_map = {
-        'blue': (0, 0, 255),
-        'red': (255, 0, 0),
-        'green': (0, 255, 0),
-        'yellow': (255, 255, 0),
-        'orange': (255, 165, 0),
-        'purple': (128, 0, 128),
-        'gray': (128, 128, 128),
-        'pink': (255, 192, 203),
-        'cyan': (0, 255, 255),
-        'black': (0, 0, 0)
-    }
+    # Define RGB values for common color names
+    color_map = {
+        'blue': (0, 0, 255),
+        'red': (255, 0, 0),
+        'green': (0, 255, 0),
+        'yellow': (255, 255, 0),
+        'orange': (255, 165, 0),
+        'purple': (128, 0, 128),
+        'gray': (128, 128, 128),
+        'pink': (255, 192, 203),
+        'cyan': (0, 255, 255),
+        'black': (0, 0, 0)
+    }
 
-    if color_name.lower() not in color_map:
-        raise ValueError(f"Unsupported color name: {color_name}. Supported colors: {list(color_map.keys())}")
+    if color_name.lower() not in color_map:
+        raise ValueError(f"Unsupported color name: {color_name}. Supported colors: {list(color_map.keys())}")
 
-    r, g, b = color_map[color_name.lower()]
+    r, g, b = color_map[color_name.lower()]
 
-    vba_code = f'''Sub CompareAndHighlightDiffs()
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
+    vba_code = f'''Sub CompareAndHighlightDiffs()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
 
-    Dim tableA As Range, tableB As Range
-    Set tableA = ws.Range("{table_a_range}")
-    Set tableB = ws.Range("{table_b_range}")
+    Dim tableA As Range, tableB As Range
+    Set tableA = ws.Range("{table_a_range}")
+    Set tableB = ws.Range("{table_b_range}")
 
-    Dim r As Long, c As Long
-    tableB.Interior.Pattern = xlNone
+    Dim r As Long, c As Long
+    tableB.Interior.Pattern = xlNone
 
-    ' --- Sort tableB by key columns ---
-    tableB.Sort Key1:=tableB.Columns(ws.Range("C1").Column), Order1:=xlAscending, Header:=xlNo
-    tableB.Sort Key1:=tableB.Columns(ws.Range("A1").Column), Order1:=xlAscending, Header:=xlNo
+    ' --- Sort tableB by key columns ---
+    tableB.Sort Key1:=tableB.Columns(ws.Range("C1").Column), Order1:=xlAscending, Header:=xlNo
+    tableB.Sort Key1:=tableB.Columns(ws.Range("A1").Column), Order1:=xlAscending, Header:=xlNo
 
-    If tableA.Rows.Count <> tableB.Rows.Count Or tableA.Columns.Count <> tableB.Columns.Count Then
-        MsgBox "Table A and B have different dimensions!", vbExclamation
-        Exit Sub
-    End If
+    If tableA.Rows.Count <> tableB.Rows.Count Or tableA.Columns.Count <> tableB.Columns.Count Then
+        MsgBox "Table A and B have different dimensions!", vbExclamation
+        Exit Sub
+    End If
 
-    For r = 1 To tableA.Rows.Count
-        For c = 1 To tableA.Columns.Count
-            If tableA.Cells(r, c).Value <> tableB.Cells(r, c).Value Then
-                tableB.Cells(r, c).Interior.Color = RGB({r}, {g}, {b})
-            End If
-        Next c
-    Next r
+    For r = 1 To tableA.Rows.Count
+        For c = 1 To tableA.Columns.Count
+            If tableA.Cells(r, c).Value <> tableB.Cells(r, c).Value Then
+                tableB.Cells(r, c).Interior.Color = RGB({r}, {g}, {b})
+            End If
+        Next c
+    Next r
 
-    MsgBox "Comparison complete. Differences highlighted.", vbInformation
+    MsgBox "Comparison complete. Differences highlighted.", vbInformation
 End Sub'''
-    return vba_code
+    return vba_code
 
 ## 案例：
 vba_code = generate_vba_compare_macro("A2:Z100", "A102:Z200", "yellow")
