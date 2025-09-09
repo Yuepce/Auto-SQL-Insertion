@@ -1,56 +1,59 @@
-# Update： 
+主要改动点：
+删除排序部分：原先的tableB.Sort相关代码已删除。
+只比较内容：只在两个区域大小一致后，逐个单元格比较，不做排序。
+高亮差异：内容不一致的单元格用指定颜色高亮。
+清除旧高亮：在比较开始前，清除tableB中的所有高亮。
+
 def generate_vba_compare_macro(table_a_range, table_b_range, color_name):
-    # Define RGB values for common color names
-    color_map = {
-        'blue': (0, 0, 255),
-        'red': (255, 0, 0),
-        'green': (0, 255, 0),
-        'yellow': (255, 255, 0),
-        'orange': (255, 165, 0),
-        'purple': (128, 0, 128),
-        'gray': (128, 128, 128),
-        'pink': (255, 192, 203),
-        'cyan': (0, 255, 255),
-        'black': (0, 0, 0)
-    }
+    # 定义颜色映射
+    color_map = {
+        'blue': (0, 0, 255),
+        'red': (255, 0, 0),
+        'green': (0, 255, 0),
+        'yellow': (255, 255, 0),
+        'orange': (255, 165, 0),
+        'purple': (128, 0, 128),
+        'gray': (128, 128, 128),
+        'pink': (255, 192, 203),
+        'cyan': (0, 255, 255),
+        'black': (0, 0, 0)
+    }
 
-    if color_name.lower() not in color_map:
-        raise ValueError(f"Unsupported color name: {color_name}. Supported colors: {list(color_map.keys())}")
+    if color_name.lower() not in color_map:
+        raise ValueError(f"Unsupported color name: {color_name}. Supported colors: {list(color_map.keys())}")
 
-    r, g, b = color_map[color_name.lower()]
+    r, g, b = color_map[color_name.lower()]
 
-    vba_code = f'''Sub CompareAndHighlightDiffs()
-    Dim ws As Worksheet
-    Set ws = ActiveSheet
+    vba_code = f'''Sub CompareAndHighlightDiffs()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
 
-    Dim tableA As Range, tableB As Range
-    Set tableA = ws.Range("{table_a_range}")
-    Set tableB = ws.Range("{table_b_range}")
+    Dim tableA As Range, tableB As Range
+    Set tableA = ws.Range("{table_a_range}")
+    Set tableB = ws.Range("{table_b_range}")
 
-    Dim r As Long, c As Long
-    tableB.Interior.Pattern = xlNone
+    ' 确保两个表格大小一致
+    If tableA.Rows.Count <> tableB.Rows.Count Or tableA.Columns.Count <> tableB.Columns.Count Then
+        MsgBox "Table A and B have different dimensions!", vbExclamation
+        Exit Sub
+    End If
 
-    ' --- Sort tableB by key columns ---
-    tableB.Sort Key1:=tableB.Columns(ws.Range("C1").Column), Order1:=xlAscending, Header:=xlNo
-    tableB.Sort Key1:=tableB.Columns(ws.Range("A1").Column), Order1:=xlAscending, Header:=xlNo
+    Dim r As Long, c As Long
+    ' 清除之前的高亮
+    tableB.Interior.Pattern = xlNone
 
-    If tableA.Rows.Count <> tableB.Rows.Count Or tableA.Columns.Count <> tableB.Columns.Count Then
-        MsgBox "Table A and B have different dimensions!", vbExclamation
-        Exit Sub
-    End If
+    For r = 1 To tableA.Rows.Count
+        For c = 1 To tableA.Columns.Count
+            If tableA.Cells(r, c).Value <> tableB.Cells(r, c).Value Then
+                tableB.Cells(r, c).Interior.Color = RGB({r}, {g}, {b})
+            End If
+        Next c
+    Next r
 
-    For r = 1 To tableA.Rows.Count
-        For c = 1 To tableA.Columns.Count
-            If tableA.Cells(r, c).Value <> tableB.Cells(r, c).Value Then
-                tableB.Cells(r, c).Interior.Color = RGB({r}, {g}, {b})
-            End If
-        Next c
-    Next r
-
-    MsgBox "Comparison complete. Differences highlighted.", vbInformation
+    MsgBox "Comparison complete. Differences highlighted.", vbInformation
 End Sub'''
-    return vba_code
+    return vba_code
 
-## 案例：
+# 示例调用
 vba_code = generate_vba_compare_macro("A2:Z100", "A102:Z200", "yellow")
 print(vba_code)
