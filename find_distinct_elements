@@ -1,0 +1,44 @@
+def format_distinct_values(copied_text):
+    """
+    将 Excel 复制的文本（可能包含空行和空格）转换为格式化后的 distinct values
+    
+    参数:
+        copied_text (str): 从 Excel 复制的文本，可能包含空行和空格
+        
+    返回:
+        str: 格式化后的 distinct values，如 ('CRHKE-B', 'SLTHI-B', 'SLFGB-B')
+    """
+    # 清理输入：去除首尾空行和空格，分割为行，去除每行首尾空格，过滤空行
+    lines = [line.strip() for line in copied_text.strip().splitlines() if line.strip()]
+    
+    if not lines:
+        return "()"  # 返回空元组字符串
+    
+    # 第一行是字段名，其余是值（过滤掉空值）
+    values = [v for v in lines[1:] if v] if len(lines) > 1 else []
+    
+    if not values:
+        return "()"  # 没有有效值时返回空元组
+    
+    # 去重并排序
+    distinct_values = sorted({v for v in values if v})  # 使用集合推导式确保去重
+    
+    # 格式化输出
+    formatted_values = ", ".join(f"'{value}'" for value in distinct_values)
+    return f"({formatted_values})"
+
+# 使用示例
+# 模拟从 Excel 复制的文本
+excel_data = """
+
+fund_code
+CRHKE-B
+SLTHI-B
+SLFGB-B
+
+SLTHI-B
+CRHKE-B
+"""
+    
+result = format_distinct_values(excel_data)
+print(result)  # 输出: ('CRHKE-B', 'SLFGB-B', 'SLTHI-B')
